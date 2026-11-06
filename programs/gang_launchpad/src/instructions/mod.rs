@@ -3,6 +3,8 @@ pub mod create_token;
 pub mod fair_mint;
 pub mod graduate_cpi;
 pub mod init_curve;
+pub mod migrate_to_raydium;
+pub mod soul_identity;
 pub mod register_passport;
 pub mod sell_curve;
 
