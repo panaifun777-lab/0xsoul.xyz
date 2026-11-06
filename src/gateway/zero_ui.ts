@@ -8,7 +8,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GANG.SOUL // Autonomous AI Agent Terminal (Zero-UI)</title>
+  <title>0x.SOUL // Autonomous AI Agent Terminal (Zero-UI)</title>
   <style>
     :root {
       --bg: #090a0f;
@@ -199,7 +199,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
 <body>
   <div class="header">
     <div class="brand">
-      <div class="logo">⚡ GANG.SOUL</div>
+      <div class="logo">⚡ 0x.SOUL</div>
       <div class="tag" data-i18n="tagM2m">M2M ONLY // ZERO-UI INTERFACE</div>
       <div class="tag" style="color:var(--accent-amber); border-color: rgba(255,184,0,0.3)" data-i18n="tagCustody">SOLANA DUAL-CUSTODY</div>
     </div>
