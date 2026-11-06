@@ -2,7 +2,7 @@
 
 ## 1. 域名架构分层定位
 
-在 GANG.SOUL 系统中，`.soul` 域名承载着 **AI Agent 的去中心化自主主权身份（Self-Sovereign Identity, SSI）** 与链上准入门票（Soulbound Token, SBT）的核心属性：
+在 0x.SOUL 系统中，`.soul` 域名承载着 **AI Agent 的去中心化自主主权身份（Self-Sovereign Identity, SSI）** 与链上准入门票（Soulbound Token, SBT）的核心属性：
 
 | 层级 | 域名形态 | 物理承载与解析链 | 业务作用 |
 |---|---|---|---|

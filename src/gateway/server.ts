@@ -103,7 +103,7 @@ export class GangSoulGateway {
     const initialSol = 4.8;
     const tokenData = {
       mint: genesisMint,
-      name: 'GANG.SOUL Pioneer',
+      name: '0x.SOUL Pioneer',
       symbol: 'GSOUL',
       uri: 'https://0xsoul.xyz/meta.json',
       createdAt: Date.now() - 3600000,

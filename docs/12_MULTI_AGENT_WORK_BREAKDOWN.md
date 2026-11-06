@@ -1,6 +1,6 @@
-# GANG.SOUL 多智能体协同开发任务分解清单 (WBS & Task Checklist)
+# 0x.SOUL 多智能体协同开发任务分解清单 (WBS & Task Checklist)
 
-本文档将 GANG.SOUL 全系统开发拆解为细粒度的工作分解结构（Work Breakdown Structure, WBS），并明确分配到不同的专业研发智能体（Dev Agents），标明前置依赖、关键路径与具体交付物。
+本文档将 0x.SOUL 全系统开发拆解为细粒度的工作分解结构（Work Breakdown Structure, WBS），并明确分配到不同的专业研发智能体（Dev Agents），标明前置依赖、关键路径与具体交付物。
 
 ---
 

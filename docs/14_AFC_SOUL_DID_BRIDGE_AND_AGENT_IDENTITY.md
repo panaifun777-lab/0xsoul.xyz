@@ -1,7 +1,7 @@
 # AFC `.soul` 双链 DID 桥接与 Agent ID 链上身份确权规范
 
 > 本文档基于对 `AFC域名网站 12.25 完成版本` 源代码的完整扫描结果编写，
-> 明确 `.soul` 域名系统与 GANG.SOUL 平台的双链身份桥接架构、Agent ID
+> 明确 `.soul` 域名系统与 0x.SOUL 平台的双链身份桥接架构、Agent ID
 > 链上绑定规则、确权流程与收益归属模型。
 
 ---
@@ -70,7 +70,7 @@ function addr(uint256 tokenId, uint256 coinType) external view returns (bytes me
 | :--- | :--- | :--- |
 | `60` | ETH / Arc | EVM 原生地址 |
 | `0` | BTC | 比特币地址 |
-| **`501`** | **Solana** | **GANG.SOUL 平台身份桥接** |
+| **`501`** | **Solana** | **0x.SOUL 平台身份桥接** |
 
 **结论：`.soul` 域名不需要"迁移"，它天然可以绑定 Solana 地址。**
 
@@ -100,7 +100,7 @@ function addr(uint256 tokenId, uint256 coinType) external view returns (bytes me
                │  （网关永不持私钥）                        │   注册 Passport
                ▼                                          │
       ┌────────────────────────────────────────────────┴──┐
-      │           GANG.SOUL Gateway（链下鉴权层）            │
+      │           0x.SOUL Gateway（链下鉴权层）            │
       │  AfcSoulBridge.resolveOnArc(fullName)             │
       │  AfcSoulBridge.verifyCrossChainBinding(...)        │
       │  SoulDomainResolver.generateAttestation(...)       │
@@ -279,7 +279,7 @@ validateRevenueConfig()  // 缺少任一环境变量时返回 { ok: false, missi
 | gang.fun | 85 SOL | ~$17,000 | 固定 SOL 金额 |
 | Moonshot | 约 $500 | ~2.5 SOL | 极低门槛 |
 | Raydium LaunchPad | 5–50 SOL | 自定义 | 创建者配置 |
-| **GANG.SOUL（默认）** | **50 SOL** | **~$10,000** | 三档可配置 |
+| **0x.SOUL（默认）** | **50 SOL** | **~$10,000** | 三档可配置 |
 
 ### 5.2 三档配置
 

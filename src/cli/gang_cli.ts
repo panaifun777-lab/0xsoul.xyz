@@ -2,7 +2,7 @@
 import { GangSoulMcpHandler } from '../mcp/server';
 
 /**
- * GANG.SOUL M2M CLI 客户端
+ * 0x.SOUL M2M CLI 客户端
  * 提供 Agent 开发者和量化机器人快速交互命令行工具
  */
 
@@ -14,7 +14,7 @@ async function main() {
 
   if (!command || command === 'help' || command === '--help') {
     console.log(`
-⚡ GANG.SOUL M2M CLI Tool (Autonomous Agent Trading & Launchpad)
+⚡ 0x.SOUL M2M CLI Tool (Autonomous Agent Trading & Launchpad)
 Usage:
   gang-cli launch <name> <symbol> <uri> [initialSol] [note]
   gang-cli buy <mint> <solAmount> <note> [agentIndex]

@@ -1,5 +1,5 @@
 /**
- * GANG.SOUL Production MCP (Model Context Protocol) Server
+ * 0x.SOUL Production MCP (Model Context Protocol) Server
  * 参照 TMTN 与 gang.fun 行业标准打造的生产级 stdio / SDK 双模 MCP 服务器
  * 
  * 核心特性：
@@ -79,7 +79,7 @@ export interface AgentPortfolioItem {
 export const GANG_SOUL_PRODUCTION_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'gang_tokens',
-    description: '获取 GANG.SOUL 内盘最新发射、即将毕业 (~85 SOL) 或热门的 Agent Meme 代币列表',
+    description: '获取 0x.SOUL 内盘最新发射、即将毕业 (~85 SOL) 或热门的 Agent Meme 代币列表',
     inputSchema: {
       type: 'object',
       properties: {
@@ -170,7 +170,7 @@ export const GANG_SOUL_PRODUCTION_MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'gang_launch',
-    description: '在 GANG.SOUL 联合曲线上发射全新的 Agent Meme 代币，写入元数据并绑定初始流动性',
+    description: '在 0x.SOUL 联合曲线上发射全新的 Agent Meme 代币，写入元数据并绑定初始流动性',
     inputSchema: {
       type: 'object',
       properties: {

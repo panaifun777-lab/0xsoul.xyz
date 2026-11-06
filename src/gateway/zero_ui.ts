@@ -1,5 +1,5 @@
 /**
- * GANG.SOUL Zero-UI Terminal Dashboard HTML
+ * 0x.SOUL Zero-UI Terminal Dashboard HTML
  * 遵循 Zero-UI 规范：严禁出现任何钱包连接按钮 (No Wallet Connect Button)
  * 纯只读高频流式终端，全量由 SSE (Server-Sent Events) 事件总线驱动
  */

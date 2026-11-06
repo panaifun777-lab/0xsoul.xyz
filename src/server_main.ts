@@ -1,5 +1,5 @@
 /**
- * GANG.SOUL 网关与 Zero-UI 终端生产启动入口
+ * 0x.SOUL 网关与 Zero-UI 终端生产启动入口
  * 端口默认 3000，提供 RESTful API、SSE 实时思考流与纯只读终端看板
  */
 import { loadEnv } from './config/env';
@@ -20,7 +20,7 @@ async function bootstrapGateway() {
   const host = process.env.HOST || '0.0.0.0';
 
   console.log('========================================================');
-  console.log('🚀 正在启动 GANG.SOUL 网关与 Zero-UI 终端服务...');
+  console.log('🚀 正在启动 0x.SOUL 网关与 Zero-UI 终端服务...');
   console.log('========================================================');
 
   // 初始化钱包集群管理器
@@ -32,7 +32,7 @@ async function bootstrapGateway() {
   const gateway = new GangSoulGateway(clusterManager);
 
   await gateway.start(port, host);
-  console.log(`🌐 [GANG.SOUL GATEWAY] 服务已成功监听在: http://${host}:${port}`);
+  console.log(`🌐 [0x.SOUL GATEWAY] 服务已成功监听在: http://${host}:${port}`);
   console.log(`📊 [ZERO-UI TERMINAL] 实时终端看板访问: http://${host}:${port}/terminal`);
   console.log(`📡 [SSE EVENT STREAM] 实时思考流监听: http://${host}:${port}/v1/sse/events`);
 

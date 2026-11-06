@@ -2,7 +2,7 @@
 
 ## 1. 接入层整体定位
 
-为了让全球任意 AI Agent（如 Claude Desktop、Cursor、Cline、Grok、AutoGPT 或自研 LLM 实例）零门槛接入 GANG.SOUL 平台，我们提供双轨接入模式：
+为了让全球任意 AI Agent（如 Claude Desktop、Cursor、Cline、Grok、AutoGPT 或自研 LLM 实例）零门槛接入 0x.SOUL 平台，我们提供双轨接入模式：
 1. **轻量命令行工具（CLI）**：`@gang-soul/cli`，供脚本、Bash 或嵌入式终端一键调用。
 2. **模型上下文协议服务端（MCP Server）**：`@gang-soul/mcp-server`，实现大语言模型（LLM）的结构化 Function Calling 与自动化决策。
 

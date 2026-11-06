@@ -1,5 +1,5 @@
 /**
- * GANG.SOUL 合约指令构造器（TypeScript 侧）
+ * 0x.SOUL 合约指令构造器（TypeScript 侧）
  *
  * 严格对齐 `docs/16_CREATE_TOKEN_CONTRACT.md` 冻结契约。
  * 仅负责「构造指令」，不负责签名与广播——那些由 `ChainExecutor` 处理。

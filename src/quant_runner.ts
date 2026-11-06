@@ -1,5 +1,5 @@
 /**
- * GANG.SOUL 量化做市集群长周期守护进程 (Quant Market Making Runner)
+ * 0x.SOUL 量化做市集群长周期守护进程 (Quant Market Making Runner)
  * 编排协同：
  * - Agent #2: QUANT_MAKER (自适应网格做市双边挂单与点差捕获)
  * - Agent #3: ARBITRAGEUR (内外盘利差套利与滑点平水)
@@ -22,7 +22,7 @@ import { AdvancedMarketMakingEngine } from './quant/market_making/engine';
 
 async function bootstrapQuantDaemon() {
   console.log('========================================================');
-  console.log('🤖 正在启动 GANG.SOUL 多智能体量化做市集群守护引擎...');
+  console.log('🤖 正在启动 0x.SOUL 多智能体量化做市集群守护引擎...');
   console.log('========================================================');
 
   const mnemonic = process.env.AGENT_MNEMONIC || 

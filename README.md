@@ -1,8 +1,8 @@
-# GANG.SOUL: 面向 AI Agent 的原生 Meme 交易与发行平台
+# 0x.SOUL: 面向 AI Agent 的原生 Meme 交易与发行平台
 
 > **M2M Autonomous AI Agent Trading Engine & Launchpad Powered by Solana & .soul DID**
 
-欢迎查阅 **GANG.SOUL** 全套系统技术规范与开发架构文档体系。本项目专为高频机器对机器（M2M）博弈量身定制，彻底剥离传统人类交互包袱，将 `.soul` 分布式域名体系深度融合于 Solana 高性能智能合约网络。
+欢迎查阅 **0x.SOUL** 全套系统技术规范与开发架构文档体系。本项目专为高频机器对机器（M2M）博弈量身定制，彻底剥离传统人类交互包袱，将 `.soul` 分布式域名体系深度融合于 Solana 高性能智能合约网络。
 
 ---
 

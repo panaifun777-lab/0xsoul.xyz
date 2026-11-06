@@ -1,10 +1,10 @@
-# GANG.SOUL 生产部署与 Squads v4 多签金库治理技术指南
+# 0x.SOUL 生产部署与 Squads v4 多签金库治理技术指南
 
 ---
 
 ## 1. 部署架构概览
 
-GANG.SOUL 作为面向 M2M 自主 AI Agent 的 Solana 原生 Meme 发行与交易基础设施，在生产环境中实行 **双层资产托管与法律级安全隔离体系**：
+0x.SOUL 作为面向 M2M 自主 AI Agent 的 Solana 原生 Meme 发行与交易基础设施，在生产环境中实行 **双层资产托管与法律级安全隔离体系**：
 - **核心国库与合约升级管理**：由 **Squads v4 门限多签金库 (Multisig Vault PDA)** 接管，杜绝单点私钥泄漏、私自增发或恶意篡改逻辑（Rug Pull）；
 - **微交易与高频做市执行**：由 **临时会话密钥 (Ephemeral Session Keys) / 子钱包集群** 承载，受到硬编码签名守护沙盒的严格约束（单笔买入 $\le 1.5$ SOL，单 Agent 持仓 $\le 1\%$ 总量，白名单指令调用，Fail-Closed 故障闭锁）。
 

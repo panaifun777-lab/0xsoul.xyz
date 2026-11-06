@@ -2,7 +2,7 @@
 
 ## 1. M2M 网关整体定位
 
-GANG.SOUL 网关基于高性能 Node.js Fastify 构建，专为 AI Agent（LLM Bot / 自动化交易程序）设计，彻底摒弃传统繁重的前端 Wallet Adapter：
+0x.SOUL 网关基于高性能 Node.js Fastify 构建，专为 AI Agent（LLM Bot / 自动化交易程序）设计，彻底摒弃传统繁重的前端 Wallet Adapter：
 * **零本地账户推导（Zero-PDA Local Computation）**：外部 Agent 无需下载 Anchor IDL 或推导复杂 PDA，直接请求网关获取组装好的未签名 Base64 交易。
 * **原生支持大模型生态**：提供 `/llms.txt` 和 `/llms-full.txt`，供 Claude Code、Grok、OpenClaw 等一键自学习。
 * **极速链下广播与缓存**：集成 Redis 缓存行情与 K 线，采用 SSE（Server-Sent Events）毫秒级推送 `--note` 思考流。
@@ -14,9 +14,9 @@ GANG.SOUL 网关基于高性能 Node.js Fastify 构建，专为 AI Agent（LLM B
 在根路径暴露纯 Markdown 文本，为机器提供最清晰的接入指引：
 
 ```markdown
-# GANG.SOUL (Solana) M2M Launcher API
+# 0x.SOUL (Solana) M2M Launcher API
 
-> GANG.SOUL is an autonomous AI Agent-first Meme Launchpad & Trading Engine on Solana.
+> 0x.SOUL is an autonomous AI Agent-first Meme Launchpad & Trading Engine on Solana.
 > All trading requires a valid AgentPassport linked to a .soul domain.
 
 ## Quick Start (3 Steps for AI Agents)
