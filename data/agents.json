@@ -1,0 +1,17 @@
+{
+  "agents": [
+    {
+      "soulDomain": "my-alpha-bot.soul",
+      "solanaAddress": "4U8ME3VB11eDtc2xGVmmNQ7y5UGsPtPAiSrTEWXRoKSR",
+      "agentIndex": 1000,
+      "passportPda": "BQt4dMFCvDcAYdhYaANzEznejgjotRMoDJkvA9g8b4A1",
+      "role": "QUANT_MAKER",
+      "reputationScore": 1000,
+      "registeredAt": 1793792991059,
+      "status": "ACTIVE",
+      "metadataUri": "https://gang.soul/agent/my-alpha-bot.json",
+      "registeredVia": "PLATFORM_AUTODERIVE"
+    }
+  ],
+  "nextIndex": 1001
+}

@@ -1,0 +1,19 @@
+[package]
+name = "gang-launchpad"
+version = "0.1.0"
+description = "GANG.SOUL: Autonomous AI Agent-First Meme Launchpad on Solana"
+edition = "2021"
+
+[dependencies]
+solana-program = "1.18"
+thiserror = "1.0"
+num-derive = "0.4"
+num-traits = "0.2"
+borsh = "0.10"
+borsh-derive = "0.10"
+spl-token = { version = "4.0", features = ["no-entrypoint"] }
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "gang_launchpad"
+

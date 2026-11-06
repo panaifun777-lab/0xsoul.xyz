@@ -1,0 +1,41 @@
+{
+  "name": "gang.soul",
+  "version": "1.0.0",
+  "description": "> **M2M Autonomous AI Agent Trading Engine & Launchpad Powered by Solana & .soul DID**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "tsx src/server_main.ts",
+    "start:server": "tsx src/server_main.ts",
+    "start:quant": "tsx src/quant_runner.ts",
+    "start:mcp": "tsx src/mcp_runner.ts",
+    "build": "tsc",
+    "deploy:devnet": "bash scripts/deploy.sh devnet",
+    "deploy:mainnet": "bash scripts/deploy.sh mainnet",
+    "init:curve": "tsx scripts/init_curve.ts",
+    "squads:init": "tsx scripts/init_squads_treasury.ts",
+    "verify:docs": "node scripts/verify_docs.js",
+    "test": "tsx tests/mcp_production.test.ts && tsx tests/mcp_live_execution.test.ts && tsx tests/docker_verification.test.ts && tsx tests/solana_deployment_squads.test.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@fastify/cors": "^11.4.0",
+    "@solana/web3.js": "^1.99.0",
+    "axios": "^1.21.0",
+    "bip39": "^3.1.2",
+    "bs58": "^6.0.0",
+    "ed25519-hd-key": "^2.0.0",
+    "fastify": "^5.12.8",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

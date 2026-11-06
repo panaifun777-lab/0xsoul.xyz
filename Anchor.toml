@@ -1,0 +1,32 @@
+[toolchain]
+anchor_version = "0.29.0"
+solana_version = "1.18.26"
+
+[features]
+seeds = true
+skip-lint = false
+
+[programs.localnet]
+gang_launchpad = "GangLaunchpad111111111111111111111111111111"
+gang_passport = "GangPassport1111111111111111111111111111111"
+
+[programs.devnet]
+gang_launchpad = "GangLaunchpad111111111111111111111111111111"
+gang_passport = "GangPassport1111111111111111111111111111111"
+
+[programs.mainnet]
+gang_launchpad = "GangLaunchpad111111111111111111111111111111"
+gang_passport = "GangPassport1111111111111111111111111111111"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "npm test"
+build-bpf = "cargo build-sbf --manifest-path programs/gang_launchpad/Cargo.toml"
+deploy-devnet = "npx tsx scripts/deploy_devnet.ts"
+init-squads = "npx tsx scripts/init_squads_treasury.ts"

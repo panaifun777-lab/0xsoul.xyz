@@ -1,0 +1,92 @@
+# ========================================================
+# GANG.SOUL 微服务编排集群 (Docker Compose Specification)
+# 服务矩阵：
+# 1. gang-gateway: RESTful M2M 网关、SSE 实时事件流与 Zero-UI 终端看板
+# 2. gang-quant-engine: 量化做市策略守护引擎 (网格、Hold Line、套利、跟单)
+# 3. gang-mcp-daemon: 生产级 MCP stdio 协议守护引擎
+# ========================================================
+
+services:
+  # ------------------------------------------------------
+  # 1. M2M API 网关与 Zero-UI 看板服务
+  # ------------------------------------------------------
+  gang-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gang-soul-gateway
+    restart: unless-stopped
+    command: ["gateway"]
+    env_file:
+      - .env.example
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    volumes:
+      - gang-telemetry-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - gang-internal-net
+
+  # ------------------------------------------------------
+  # 2. 多智能体高级量化做市集群引擎
+  # ------------------------------------------------------
+  gang-quant-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gang-soul-quant
+    restart: unless-stopped
+    command: ["quant"]
+    env_file:
+      - .env.example
+    environment:
+      - NODE_ENV=production
+      - QUANT_CYCLE_INTERVAL_MS=3000
+    depends_on:
+      gang-gateway:
+        condition: service_healthy
+    volumes:
+      - gang-telemetry-data:/app/data
+    networks:
+      - gang-internal-net
+
+  # ------------------------------------------------------
+  # 3. 生产级 MCP Stdio 协议守护服务
+  # ------------------------------------------------------
+  gang-mcp-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gang-soul-mcp
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: ["mcp"]
+    env_file:
+      - .env.example
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      gang-gateway:
+        condition: service_healthy
+    volumes:
+      - gang-telemetry-data:/app/data
+    networks:
+      - gang-internal-net
+
+volumes:
+  gang-telemetry-data:
+    driver: local
+
+networks:
+  gang-internal-net:
+    driver: bridge

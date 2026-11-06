@@ -1,0 +1,128 @@
+{
+  "network": "testnet",
+  "chainId": 5042002,
+  "rpcUrl": "https://rpc.testnet.arc.io",
+  "explorer": "https://explorer.testnet.arc.io",
+  "deployer": "0x10687368eF1be3f178de0fCCf5EdfF49e1C258B1",
+  "protocolOwner": "0x10687368eF1be3f178de0fCCf5EdfF49e1C258B1",
+  "beneficiary": "0x10687368eF1be3f178de0fCCf5EdfF49e1C258B1",
+  "usdc": "0x3600000000000000000000000000000000000000",
+  "baseURI": "https://metadata.arcnames.io/",
+  "tlds": [
+    "web4",
+    "web5",
+    "soul"
+  ],
+  "pricing": {
+    "1": {
+      "status": 0,
+      "register": "0.0",
+      "renew": "0.0",
+      "registerRaw": "0",
+      "renewRaw": "0"
+    },
+    "2": {
+      "status": 0,
+      "register": "0.0",
+      "renew": "0.0",
+      "registerRaw": "0",
+      "renewRaw": "0"
+    },
+    "3": {
+      "status": 1,
+      "register": "160.0",
+      "renew": "160.0",
+      "registerRaw": "160000000",
+      "renewRaw": "160000000"
+    },
+    "4": {
+      "status": 2,
+      "register": "16.0",
+      "renew": "16.0",
+      "registerRaw": "16000000",
+      "renewRaw": "16000000"
+    },
+    "5": {
+      "status": 2,
+      "register": "8.0",
+      "renew": "8.0",
+      "registerRaw": "8000000",
+      "renewRaw": "8000000"
+    }
+  },
+  "contracts": {
+    "registry": "0x79f1DF663a4b543cEF6bB09e7A47C050eC0A7398",
+    "resolver": "0xF1A286D1374969d24601C46D117DBA4Bc59b35cD",
+    "registrar": "0xaC3fa556996c8865e61f995f83E8e1ea56a28c0b"
+  },
+  "blocks": {
+    "startBlock": 69892902,
+    "registry": 69892907,
+    "resolver": 69892921,
+    "registrar": 69892926,
+    "deployBlock": 69892907,
+    "endBlock": 69892975
+  },
+  "transactions": {
+    "ArcNameRegistry": "0x9286f9b70cae3e33a4e965f5387da30b6df76287b2ac3501cf750fda72b90119",
+    "ArcNameResolver": "0x0096614b1ab7d02d0c978beae310b50b3491d7558853bf981c5a4ed466c2ec8d",
+    "ArcNameRegistrar": "0x85556dff2d045b226b2ee65c1ce4f779b91453ca2c4031a85516f043b153ebfa",
+    "registry.setRegistrar": "0xaa29d87a0e063d05b408ab86583f55894b653876a0e092272f7583e7f6d65b7a",
+    "registry.setBaseURI": "0xe91e4092b58786b1b3fc0fb7c850a81326855877777e3847ba65688299f4a3f8",
+    "registrar.setTldStatus(web4)": "0xb7057b527daa2bae8cfa95d7946e5fabf3cf86cd749c0012d02ca8a81af733a8",
+    "registrar.setTldStatus(web5)": "0xe51e447144a92e1c9780fba2f051b0bbec12d3a63a3d6bf888bd9939b221bc13",
+    "registrar.setTldStatus(soul)": "0xca4b67e97e3e4273c8b89f36e7dc774acd50dfbefd7cb5099d46d173588974a6"
+  },
+  "onchain": {
+    "protocolOwner": "0x10687368eF1be3f178de0fCCf5EdfF49e1C258B1",
+    "registryOwner": "0x10687368eF1be3f178de0fCCf5EdfF49e1C258B1",
+    "registrarOwner": "0x10687368eF1be3f178de0fCCf5EdfF49e1C258B1",
+    "beneficiary": "0x10687368eF1be3f178de0fCCf5EdfF49e1C258B1",
+    "registrarAllowed": true,
+    "baseURI": "https://metadata.arcnames.io/",
+    "resolver": "0xF1A286D1374969d24601C46D117DBA4Bc59b35cD",
+    "tlds": {
+      "web4": true,
+      "web5": true,
+      "soul": true
+    },
+    "pricing": {
+      "1": {
+        "status": 0,
+        "register": "0.0",
+        "renew": "0.0",
+        "registerRaw": "0",
+        "renewRaw": "0"
+      },
+      "2": {
+        "status": 0,
+        "register": "0.0",
+        "renew": "0.0",
+        "registerRaw": "0",
+        "renewRaw": "0"
+      },
+      "3": {
+        "status": 1,
+        "register": "160.0",
+        "renew": "160.0",
+        "registerRaw": "160000000",
+        "renewRaw": "160000000"
+      },
+      "4": {
+        "status": 2,
+        "register": "16.0",
+        "renew": "16.0",
+        "registerRaw": "16000000",
+        "renewRaw": "16000000"
+      },
+      "5": {
+        "status": 2,
+        "register": "8.0",
+        "renew": "8.0",
+        "registerRaw": "8000000",
+        "renewRaw": "8000000"
+      }
+    }
+  },
+  "timestamp": "2026-10-30T20:01:55.948Z"
+}
