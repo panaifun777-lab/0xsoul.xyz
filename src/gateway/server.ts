@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import { SolanaAgentClusterManager } from "../wallet/cluster";
 import { QuantTradingAdapter } from "../quant/market_making/adapter";
 import { ARC_PRODUCTION_CONFIG } from "../config/arc_production";
+import { ZERO_UI_HTML } from "./zero_ui";
 
 export class GangSoulGateway {
   private fastify = Fastify({ logger: false });
@@ -17,23 +18,22 @@ export class GangSoulGateway {
   async start() {
     await this.fastify.register(cors, { origin: true });
 
-    this.fastify.get("/", async () => ({
-      success: true,
-      service: "0xsoul.xyz M2M Gateway",
-      version: "2.5.0",
-      multichain: {
-        arc: ARC_PRODUCTION_CONFIG,
-        solana: {
-          mint: "GgZcyZ8A2wWxULFPfjJ6deUMqmoN1QDpLnZVGkBkiVcL",
-          programId: "GangLaunchpad111111111111111111111111111111",
-          raydiumCpmm: "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
-        }
-      },
-      endpoints: ["/v1/terminal/state", "/v1/sse/events", "/llms.txt"]
-    }));
+    // 直接在前端 HTML 模板中把 ARC EVM 合约地址写死渲染，确保用户打开首页第一秒即可清晰看到
+    const renderedHtml = ZERO_UI_HTML.replace(
+      '<div class="contract-hash" id="evm-contract">0x860Db6Fc2f6fE8639bf2A0B07b738093727fEC6f</div>',
+      `<div class="contract-hash" id="evm-contract">${ARC_PRODUCTION_CONFIG.contracts.token}</div>`
+    );
+
+    this.fastify.get("/", async (req, reply) => {
+      reply.type("text/html").send(renderedHtml);
+    });
+
+    this.fastify.get("/terminal", async (req, reply) => {
+      reply.type("text/html").send(renderedHtml);
+    });
 
     this.fastify.get("/llms.txt", async (req, reply) => {
-      reply.type("text/markdown").send("# 0xsoul.xyz LLM Instructions\\nAutonomous AI Agent-First Meme Launchpad & Trading Engine.");
+      reply.type("text/markdown").send("# 0xsoul.xyz LLM Instructions\\nAutonomous AI Agent-First Meme Launchpad & Trading Engine.\\n- ARC Mainnet Token: " + ARC_PRODUCTION_CONFIG.contracts.token + "\\n- Solana Mint: GgZcyZ8A2wWxULFPfjJ6deUMqmoN1QDpLnZVGkBkiVcL");
     });
 
     this.fastify.get("/v1/terminal/state", async () => ({
@@ -43,11 +43,13 @@ export class GangSoulGateway {
         arc: ARC_PRODUCTION_CONFIG,
         solana: {
           mint: "GgZcyZ8A2wWxULFPfjJ6deUMqmoN1QDpLnZVGkBkiVcL",
-          programId: "GangLaunchpad111111111111111111111111111111"
+          programId: "GangLaunchpad111111111111111111111111111111",
+          raydiumCpmm: "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
         }
       },
       token: {
         mint: "GgZcyZ8A2wWxULFPfjJ6deUMqmoN1QDpLnZVGkBkiVcL",
+        evmToken: ARC_PRODUCTION_CONFIG.contracts.token,
         name: "0x.SOUL Pioneer",
         symbol: "0x.SOUL",
         uri: "https://gateway.pinata.cloud/ipfs/bafkreidc6w5pp4khqcsd572aib4kyc5j5cgdrzu3zzicmcu3lu64dc2yqm",
@@ -64,17 +66,19 @@ export class GangSoulGateway {
         {
           type: "TOKEN_LAUNCHED",
           mint: "GgZcyZ8A2wWxULFPfjJ6deUMqmoN1QDpLnZVGkBkiVcL",
+          evmToken: ARC_PRODUCTION_CONFIG.contracts.token,
           name: "0x.SOUL Pioneer",
           symbol: "0x.SOUL",
           creator: "8qSEaqYkGGgW8qJPpyzgzTzFp11PvkB2WP6EHJcAXurB",
           initialBuySol: 4.8,
-          note: "Genesis launch of $0x.SOUL. Dual-custody bonding curve initialized. Zero-UI ready.",
+          note: "Genesis launch of $0x.SOUL across ARC Mainnet (EVM: " + ARC_PRODUCTION_CONFIG.contracts.token + ") & Solana.",
           timestamp: Date.now() - 3600000
         }
       ],
       serverTime: Date.now()
     }));
 
+    // 实时数据流 SSE 管道
     this.fastify.get("/v1/sse/events", async (req, reply) => {
       reply.raw.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
@@ -100,7 +104,7 @@ export class GangSoulGateway {
         "Broadcasting Jito Bundle (tip 0.0001 SOL) to prevent sandwich attack.",
         "Checking 50 SOL graduation target progress (currently 9.6%).",
         "Enforcing 1% max wallet cap (10,000,000 tokens) via .soul passport PDA.",
-        "Verifying ARC EVM cross-chain bridge attestation (Token: 0x860Db6Fc2f6fE8639bf2A0B07b738093727fEC6f)."
+        `Verifying ARC EVM cross-chain bridge attestation (Token: ${ARC_PRODUCTION_CONFIG.contracts.token}).`
       ];
 
       const timer = setInterval(() => {
@@ -110,7 +114,7 @@ export class GangSoulGateway {
         try {
           reply.raw.write(`event: agent_thought\\ndata: ${JSON.stringify(ev)}\\n\\n`);
         } catch (err) {}
-      }, 2000);
+      }, 1500);
 
       req.raw.on("close", () => {
         clearInterval(timer);

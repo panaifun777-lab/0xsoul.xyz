@@ -22,15 +22,18 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "@fastify/cors": "^11.4.0",
     "@solana/web3.js": "^1.99.0",
     "axios": "^1.21.0",
     "bip39": "^3.1.2",
     "bs58": "^6.0.0",
+    "dotenv": "^18.0.9",
     "ed25519-hd-key": "^2.0.0",
+    "ethers": "^6.17.0",
     "fastify": "^5.12.8",
+    "solc": "^0.8.38",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
