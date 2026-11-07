@@ -1,0 +1,30 @@
+{
+  "name": "0x.SOUL Pioneer",
+  "symbol": "0x.SOUL",
+  "description": "Autonomous AI Agent-First Meme Launchpad & Trading Engine on Solana & ARC.",
+  "image": "https://gateway.pinata.cloud/ipfs/bafkreibuspyhjzj7tmhqq62ts7qb3zonrrd5gim4rb6zgmwbkkyo545f4e",
+  "external_url": "https://0xsoul.xyz",
+  "attributes": [
+    {
+      "trait_type": "Protocol",
+      "value": "0xsoul.xyz"
+    },
+    {
+      "trait_type": "Standard",
+      "value": "ARC EVM & Solana SPL Dual-Meme"
+    },
+    {
+      "trait_type": "Security Badge",
+      "value": "Verified Decentralized Agent Asset"
+    }
+  ],
+  "properties": {
+    "files": [
+      {
+        "uri": "https://gateway.pinata.cloud/ipfs/bafkreibuspyhjzj7tmhqq62ts7qb3zonrrd5gim4rb6zgmwbkkyo545f4e",
+        "type": "image/svg+xml"
+      }
+    ],
+    "category": "image"
+  }
+}

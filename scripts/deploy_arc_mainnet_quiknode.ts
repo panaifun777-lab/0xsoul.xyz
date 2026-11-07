@@ -1,0 +1,66 @@
+import { ethers } from "ethers";
+import solc from "solc";
+import fs from "fs";
+
+async function deployArcMainnetToken() {
+  console.log("====================================================");
+  console.log("🚀 开始在 ARC 主网上正式部署 $GSOUL ($0x.SOUL) 代币");
+  console.log("====================================================");
+
+  // 使用您提供的 QuikNode ARC 主网 RPC 端点与 Bearer Token 身份验证令牌
+  const rpcUrl = "https://thrumming-young-hexagon.arc-mainnet.quiknode.pro/ee85baa1ae83c6a636dec0cb0b9c0d41ebb9cc9d/";
+  const privateKey = "9608d47aeb452f26bff12d6f93dbcfb2b29b5396703bfc1e12c7487b89d35a91";
+
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const wallet = new ethers.Wallet(privateKey, provider);
+  console.log(`👤 主网部署操作员钱包: ${wallet.address}`);
+
+  const balance = await provider.getBalance(wallet.address);
+  console.log(`💰 钱包 ARC 主网余额: ${ethers.formatEther(balance)} ARC`);
+
+  const sourceCode = fs.readFileSync("contracts/ArcSoulToken.sol", "utf8");
+  const input = {
+    language: "Solidity",
+    sources: { "ArcSoulToken.sol": { content: sourceCode } },
+    settings: { outputSelection: { "*": { "*": ["abi", "evm.bytecode"] } } }
+  };
+
+  function findImports(importPath: string) {
+    if (importPath.startsWith("@openzeppelin/")) {
+      return { contents: fs.readFileSync("node_modules/" + importPath, "utf8") };
+    }
+    return { error: "File not found" };
+  }
+
+  console.log("📦 正在本地编译 ArcSoulToken.sol...");
+  const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));
+  
+  if (output.errors) {
+    output.errors.forEach((err: any) => console.log(err.formattedMessage));
+    if (output.errors.some((e: any) => e.severity === "error")) {
+      throw new Error("编译失败");
+    }
+  }
+
+  const contractFile = output.contracts["ArcSoulToken.sol"]["ArcSoulToken"];
+  const abi = contractFile.abi;
+  const bytecode = contractFile.evm.bytecode.object;
+
+  console.log("🚀 编译成功！正在向 ARC 主网广播代币合约创建交易...");
+  const factory = new ethers.ContractFactory(abi, bytecode, wallet);
+  const initialOwner = "0x10687368eF1be3f178de0fCCf5EdfF49e1C258B1";
+  
+  const contract = await factory.deploy(initialOwner);
+  await contract.waitForDeployment();
+
+  const address = await contract.getAddress();
+  console.log("====================================================");
+  console.log("🎉 $GSOUL ($0x.SOUL) 成功正式部署在 ARC 主网！");
+  console.log("📍 主网代币合约地址:", address);
+  console.log("👑 合约 Owner:", await contract.owner());
+  console.log("====================================================");
+}
+
+deployArcMainnetToken().catch((err) => {
+  console.error("❌ ARC 主网部署异常:", err.message);
+});
