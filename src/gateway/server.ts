@@ -4,16 +4,71 @@ import { SolanaAgentClusterManager } from "../wallet/cluster";
 import { ARC_PRODUCTION_CONFIG } from "../config/arc_production";
 import { ZERO_UI_HTML } from "./zero_ui";
 import { DomainPricingManager } from "../soul/domain_pricing";
+import { Connection } from "@solana/web3.js";
+import { createHash } from "crypto";
+import {
+  X402PaymentEngine,
+  AlphaSignalData,
+} from "../x402/middleware";
+import {
+  OnChainPaymentVerifier,
+  createSolanaPaymentQuery,
+} from "../x402/onchain_verifier";
 
 export class GangSoulGateway {
   private fastify = Fastify({ logger: false });
   private cluster: SolanaAgentClusterManager;
+  private engine: X402PaymentEngine;
 
-  constructor() {
-    this.cluster = new SolanaAgentClusterManager();
+  constructor(clusterManager?: SolanaAgentClusterManager) {
+    this.cluster =
+      clusterManager ||
+      new SolanaAgentClusterManager(
+        process.env.AGENT_MNEMONIC ||
+          "wool vintage lock whisper razor diesel divide plastic unaware shield shock brass abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      );
+    this.engine = this.buildEngine();
   }
 
-  async start() {
+  /**
+   * 构造 x402 微支付引擎。
+   *
+   * - 默认（未设置 X402_ONCHAIN=1）使用内存模式，仅供本地演示 / CI；
+   *   该模式下 verifyPayment 不读链，任意签名都能通过，**生产切勿依赖**。
+   * - 设置 X402_ONCHAIN=1 且提供 RPC 时，挂上真实链上验款器，
+   *   实现“支付即证明、决策可审计”的闭环。
+   */
+  private buildEngine(): X402PaymentEngine {
+    const recipient =
+      process.env.GANG_PROTOCOL_FEE_RECEIVER_SOLANA ||
+      "11111111111111111111111111111111";
+
+    const options: { verifier?: OnChainPaymentVerifier } = {};
+    if (process.env.X402_ONCHAIN === "1") {
+      const rpc =
+        process.env.SOLANA_NETWORK === "mainnet"
+          ? process.env.SOLANA_MAINNET_RPC
+          : process.env.SOLANA_DEVNET_RPC;
+      if (rpc) {
+        const connection = new Connection(rpc, "confirmed");
+        options.verifier = new OnChainPaymentVerifier(
+          createSolanaPaymentQuery(connection),
+          { enabled: true },
+        );
+      }
+    }
+
+    const engine = new X402PaymentEngine(recipient, options);
+    if (!engine.isOnChainMode()) {
+      console.warn(
+        "⚠️  [x402] 运行于内存模式（未启用链上验款）。" +
+          "生产环境请设置 X402_ONCHAIN=1 并提供 SOLANA_*_RPC，否则付费数据可被伪造取走。",
+      );
+    }
+    return engine;
+  }
+
+  async start(port?: number, host?: string) {
     await this.fastify.register(cors, { origin: true });
 
     // 增强版机器可读遥测数据与多链资产矩阵
@@ -21,6 +76,11 @@ export class GangSoulGateway {
       success: true,
       service: "0xsoul.xyz M2M Autonomous Gateway",
       version: "2.6.0",
+      x402: {
+        mode: this.engine.isOnChainMode() ? "onchain" : "memory",
+        endpoint: "/v1/signals/alpha",
+        feeSol: Number(process.env.ALPHA_SIGNAL_FEE_SOL || 0.005),
+      },
       multichain: {
         arc: ARC_PRODUCTION_CONFIG,
         solana: {
@@ -100,6 +160,9 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
 - 5 digits / Numeric: 2.0 USDC
 - >= 6 chars (Long-tail): 0.99 USDC
 
+## x402 Micropayment Endpoints
+- GET /v1/signals/alpha (HTTP 402 + invoice, pay to unlock premium alpha signals)
+
 ## Endpoints
 - GET /v1/terminal/state (Live Telemetry)
 - GET /v1/sse/events (Live Agent Thought Stream & Orders)
@@ -135,6 +198,53 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
         transaction: txData
       };
     });
+
+    // x402 高阶 Alpha 信号微支付端点
+    // 未付费 → 402 + 发票；携带 x-payment-nonce / x-payment-signature → 验款后返回信号与结算回执
+    this.fastify.get(
+      "/v1/signals/alpha",
+      async (req: FastifyRequest, reply: FastifyReply) => {
+        const nonce = req.headers["x-payment-nonce"] as string | undefined;
+        const signature = req.headers["x-payment-signature"] as
+          | string
+          | undefined;
+
+        if (!nonce || !signature) {
+          const signals = this.buildAlphaSignals();
+          const thoughtHash = this.buildThoughtHash(signals[0]);
+          const invoice = this.engine.createInvoice(
+            Number(process.env.ALPHA_SIGNAL_FEE_SOL || 0.005),
+            0.25,
+            120,
+            { tier: "PREMIUM_ALPHA_SNIPER", thoughtHash },
+          );
+          return reply.status(402).send({
+            error: "Payment required to access premium alpha signals",
+            invoice,
+          });
+        }
+
+        const result = this.engine.isOnChainMode()
+          ? await this.engine.verifyPaymentOnChain(nonce, signature)
+          : this.engine.verifyPayment(nonce, signature);
+
+        if (!result.valid) {
+          return reply.status(402).send({
+            error: "Payment verification failed",
+            detail: result.error,
+          });
+        }
+
+        const signals = this.buildAlphaSignals();
+        const receipt = this.engine.getSettlementReceipt(signature);
+        return reply.send({
+          success: true,
+          signals,
+          paymentSettled: true,
+          receipt,
+        });
+      },
+    );
 
     // SSE 实时数据流管道
     this.fastify.get("/v1/sse/events", async (req, reply) => {
@@ -179,9 +289,47 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
       });
     });
 
-    const port = Number(process.env.PORT || 3000);
-    const host = process.env.HOST || "0.0.0.0";
-    await this.fastify.listen({ port, host });
-    console.log(`🌐 [0x.SOUL GATEWAY] 服务已成功监听在: http://${host}:${port}`);
+    const listenPort = port ?? Number(process.env.PORT || 3000);
+    const listenHost = host || process.env.HOST || "0.0.0.0";
+    await this.fastify.listen({ port: listenPort, host: listenHost });
+    console.log(
+      `🌐 [0x.SOUL GATEWAY] 服务已成功监听在: http://${listenHost}:${listenPort}`,
+    );
+  }
+
+  async stop() {
+    await this.fastify.close();
+  }
+
+  /** 生成示例高阶 Alpha 信号（M2M 付费数据流） */
+  private buildAlphaSignals(): AlphaSignalData[] {
+    const now = Date.now();
+    return [
+      {
+        mint: "GgZcyZ8A2wWxULFPfjJ6deUMqmoN1QDpLnZVGkBkiVcL",
+        symbol: "0x.SOUL",
+        signalType: "WHALE_ACCUMULATION",
+        confidenceScore: 0.92,
+        smartMoneyInflowSol: 3.4,
+        recommendedBuyRange: [0.000000027, 0.000000031],
+        generatedAt: now,
+      },
+      {
+        mint: "So11111111111111111111111111111111111111112",
+        symbol: "SOL",
+        signalType: "BREAKOUT_MOMENTUM",
+        confidenceScore: 0.78,
+        smartMoneyInflowSol: 12.1,
+        recommendedBuyRange: [180, 195],
+        generatedAt: now,
+      },
+    ];
+  }
+
+  /** 将信号推理内容哈希，绑定到发票 / 结算回执的 thoughtHash（支付即证明、决策可审计） */
+  private buildThoughtHash(signal: AlphaSignalData): string {
+    return (
+      "0x" + createHash("sha256").update(JSON.stringify(signal)).digest("hex")
+    );
   }
 }
