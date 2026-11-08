@@ -18,7 +18,8 @@ services:
     restart: unless-stopped
     command: ["gateway"]
     env_file:
-      - .env.example
+      # 生产密钥（Helius RPC 含 API Key）存于 gitignored 的 .env，绝不进仓库
+      - .env
     environment:
       - PORT=3000
       - HOST=0.0.0.0
