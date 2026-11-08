@@ -110,8 +110,8 @@ export function createSolanaPaymentQuery(connection: Connection): PaymentQueryFn
       const ixType = dataBuf.readUInt32LE(0);
       if (ixType !== 2) continue;
 
-      payer = accountKeys[ix.accountKeyIndexes?.[0] ?? ix.accounts[0]].toBase58();
-      recipient = accountKeys[ix.accountKeyIndexes?.[1] ?? ix.accounts[1]].toBase58();
+      payer = accountKeys[ix.accountKeyIndexes?.[0] ?? (ix as any).accounts?.[0] ?? 0].toBase58();
+      recipient = accountKeys[ix.accountKeyIndexes?.[1] ?? (ix as any).accounts?.[1] ?? 1].toBase58();
       lamports = dataBuf.readBigUInt64LE(4);
       break;
     }

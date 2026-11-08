@@ -12,6 +12,17 @@ export interface PaymentInvoice {
   amountUsdc: number;
   paymentNonce: string;
   expiryTimestamp: number;
+  thoughtHash?: string; // 链上思考流哈希 (Thought Stream / --note)
+  tier?: string;        // 动态定价档位
+}
+
+export interface SettlementReceipt {
+  paymentNonce: string;
+  txSignature: string;
+  payer: string;
+  amountSol: number;
+  thoughtHash?: string;
+  settledAt: number;
 }
 
 export interface AlphaSignalData {
@@ -41,6 +52,7 @@ export class X402PaymentEngine {
   private recipientVault: PublicKey;
   private pendingInvoices: Map<string, PaymentInvoice> = new Map();
   private processedSignatures: Set<string> = new Set();
+  private settlementReceipts: Map<string, SettlementReceipt> = new Map();
   private verifier?: OnChainPaymentVerifier;
   public totalRevenueSol: number = 0;
 
@@ -64,9 +76,14 @@ export class X402PaymentEngine {
   }
 
   /**
-   * 生成针对当前请求的微支付账单
+   * 生成针对当前请求的微支付账单（支持动态定价与链上思考流绑定）
    */
-  public createInvoice(costSol = 0.001, costUsdc = 0.05, ttlSeconds = 180): PaymentInvoice {
+  public createInvoice(
+    costSol = 0.001,
+    costUsdc = 0.05,
+    ttlSeconds = 180,
+    options?: { thoughtHash?: string; tier?: string }
+  ): PaymentInvoice {
     const paymentNonce = `inv_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const invoice: PaymentInvoice = {
       recipientVault: this.recipientVault.toBase58(),
@@ -74,6 +91,8 @@ export class X402PaymentEngine {
       amountUsdc: costUsdc,
       paymentNonce,
       expiryTimestamp: Date.now() + ttlSeconds * 1000,
+      thoughtHash: options?.thoughtHash,
+      tier: options?.tier || 'STANDARD_ALPHA_SIGNAL',
     };
     this.pendingInvoices.set(paymentNonce, invoice);
     return invoice;
@@ -112,10 +131,20 @@ export class X402PaymentEngine {
       return { valid: false, error: `Insufficient payment: required ${invoice.amountSol} SOL, got ${actualPaid} SOL` };
     }
 
-    // 4. 结算入账
+    // 4. 结算入账并记录带有 Thought Hash 的结算回执
     this.processedSignatures.add(txSignature);
     this.pendingInvoices.delete(paymentNonce);
     this.totalRevenueSol += actualPaid;
+
+    const receipt: SettlementReceipt = {
+      paymentNonce,
+      txSignature,
+      payer: 'memory_sim_payer',
+      amountSol: actualPaid,
+      thoughtHash: invoice.thoughtHash,
+      settledAt: Date.now(),
+    };
+    this.settlementReceipts.set(txSignature, receipt);
 
     return { valid: true };
   }
@@ -164,17 +193,27 @@ export class X402PaymentEngine {
       return { valid: false, error: result.error, fact: result.fact };
     }
 
-    // 3. 结算入账（金额以链上实际到账为准）
+    // 3. 结算入账（金额以链上实际到账为准）并记录带有 Thought Hash 的回执
     const actualSol = result.fact ? Number(result.fact.lamports) / 1_000_000_000 : invoice.amountSol;
     this.processedSignatures.add(txSignature);
     this.pendingInvoices.delete(paymentNonce);
     this.totalRevenueSol += actualSol;
 
+    const receipt: SettlementReceipt = {
+      paymentNonce,
+      txSignature,
+      payer: options?.expectedPayer || result.fact?.payer || 'unknown_payer',
+      amountSol: actualSol,
+      thoughtHash: invoice.thoughtHash,
+      settledAt: Date.now(),
+    };
+    this.settlementReceipts.set(txSignature, receipt);
+
     return { valid: true, fact: result.fact };
   }
 
-  /** 注入或替换链上验款器（用于运行期切换模式） */
-  public setVerifier(verifier: OnChainPaymentVerifier): void {
-    this.verifier = verifier;
+  /** 查询指定交易签名的结算回执（包含 Thought Hash 审计） */
+  public getSettlementReceipt(txSignature: string): SettlementReceipt | undefined {
+    return this.settlementReceipts.get(txSignature);
   }
 }
