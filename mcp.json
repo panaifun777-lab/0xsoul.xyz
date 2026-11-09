@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "0xsoul-mcp": {
+      "command": "node",
+      "args": ["/opt/0xsoul/dist/mcp_runner.js"],
+      "env": {
+        "SOLANA_NETWORK": "mainnet",
+        "SOLANA_MAINNET_RPC": "https://mainnet.helius-rpc.com/?api-key=c986b019-fe2a-4907-9652-baad22bc3647",
+        "X402_ONCHAIN": "1"
+      }
+    }
+  }
+}

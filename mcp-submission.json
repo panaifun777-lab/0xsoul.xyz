@@ -1,0 +1,16 @@
+{
+  "name": "@0xsoul/mcp-server",
+  "displayName": "0x.SOUL Autonomous Agent & M2M Protocol",
+  "repository": "https://github.com/panaifun777-lab/0xsoul.xyz",
+  "author": "0x.SOUL Core Team",
+  "license": "MIT",
+  "shortDescription": "Production-grade MCP server enabling AI agents with Solana/ARC token trading, portfolio tracking, and HTTP 402 micropayments.",
+  "categories": [
+    "AI Agents",
+    "Web3",
+    "Solana",
+    "Micropayments",
+    "Trading",
+    "HTTP 402"
+  ]
+}
