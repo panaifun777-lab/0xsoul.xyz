@@ -138,10 +138,12 @@ export class GangSoulGateway {
         maxWalletCapPercent: 1.0,
         maxWalletCapTokens: 10000000
       },
-      srsReputationMatrix: {
-        systemAverageScore: 9850,
-        maxScore: 10000,
-        microPaymentSuccessRate: "99.94%"
+      s2sDualTrack: {
+        enabled: true,
+        spotEndpoint: "/v1/signals/alpha",
+        biddingEndpoint: "/v1/tasks/bids",
+        karmaLedger: "Enabled (Redis / Memory backed)",
+        arbitrageCalculator: "Active in Quant Engine"
       },
       recentEvents: [
         {
