@@ -142,6 +142,16 @@ async function run() {
   const fallbackStore = await createPaymentStore({ redisUrl: 'redis://127.0.0.1:59999' });
   check('Redis 不可达时安全回退内存', fallbackStore instanceof MemoryPaymentStore);
 
+  /* ---- 5. 滑动窗口限流测试 ---- */
+  console.log('\n[P1-5] 滑动窗口限流测试');
+  const rlStore = new MemoryPaymentStore();
+  const res1 = await rlStore.rateLimit('client-1', 2, 60);
+  check('第 1 次请求允许', res1.allowed === true && res1.remaining === 1);
+  const res2 = await rlStore.rateLimit('client-1', 2, 60);
+  check('第 2 次请求允许', res2.allowed === true && res2.remaining === 0);
+  const res3 = await rlStore.rateLimit('client-1', 2, 60);
+  check('超出限制（第 3 次）被拦截', res3.allowed === false && res3.remaining === 0);
+
   console.log('\n====================================================');
   console.log(`🎉 P1 功能验证全部通过！共 ${passCount} 项断言，${failCount} 失败`);
   console.log('====================================================');

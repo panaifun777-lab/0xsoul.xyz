@@ -123,6 +123,8 @@ async function main() {
   console.log('========================================================');
 }
 
-if (require.main === module) {
+import { pathToFileURL } from 'url';
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(console.error);
 }

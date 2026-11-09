@@ -17,12 +17,16 @@ import {
 } from "../x402/onchain_verifier";
 import { resolveTier, priceForAsset, TIER_PRICING } from "../x402/pricing";
 import { buildAttestation } from "../x402/attestation";
-import { createPaymentStore } from "../x402/store";
+import {
+  createPaymentStore,
+  type PaymentStore,
+} from "../x402/store";
 
 export class GangSoulGateway {
   private fastify = Fastify({ logger: false });
   private cluster: SolanaAgentClusterManager;
   private engine: X402PaymentEngine;
+  private store?: PaymentStore;
 
   constructor(clusterManager?: SolanaAgentClusterManager) {
     this.cluster =
@@ -77,6 +81,7 @@ export class GangSoulGateway {
 
     // 持久化存储升级：若配置了 REDIS_URL，则探测后切换到 Redis（不可达则安全回退内存）
     const store = await createPaymentStore();
+    this.store = store;
     this.engine.setStore(store);
 
     // 增强版机器可读遥测数据与多链资产矩阵
@@ -226,6 +231,23 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
     this.fastify.get(
       "/v1/signals/alpha",
       async (req: FastifyRequest, reply: FastifyReply) => {
+        if (this.store) {
+          const clientIp =
+            (req.headers["x-forwarded-for"] as string) ||
+            req.ip ||
+            "unknown";
+          const rl = await this.store.rateLimit(clientIp, 60, 60);
+          reply.header("X-RateLimit-Limit", "60");
+          reply.header("X-RateLimit-Remaining", String(rl.remaining));
+          if (!rl.allowed) {
+            return reply.status(429).send({
+              success: false,
+              error: "Too many requests, rate limit exceeded",
+              retryAfterSeconds: Math.ceil(rl.resetInMs / 1000),
+            });
+          }
+        }
+
         const nonce = req.headers["x-payment-nonce"] as string | undefined;
         const signature = req.headers["x-payment-signature"] as
           | string

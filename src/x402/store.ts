@@ -22,6 +22,12 @@
 
 import type { PaymentInvoice, SettlementReceipt } from './middleware';
 
+export interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetInMs: number;
+}
+
 export interface PaymentStore {
   saveInvoice(nonce: string, invoice: PaymentInvoice): Promise<void>;
   getInvoice(nonce: string): Promise<PaymentInvoice | undefined>;
@@ -31,6 +37,7 @@ export interface PaymentStore {
   consumedCount(): Promise<number>;
   saveReceipt(signature: string, receipt: SettlementReceipt): Promise<void>;
   getReceipt(signature: string): Promise<SettlementReceipt | undefined>;
+  rateLimit(identifier: string, limit: number, windowSeconds: number): Promise<RateLimitResult>;
 }
 
 const INV_PREFIX = 'x402:inv:';
@@ -42,6 +49,7 @@ export class MemoryPaymentStore implements PaymentStore {
   private invoices = new Map<string, PaymentInvoice>();
   private receipts = new Map<string, SettlementReceipt>();
   private consumed = new Set<string>();
+  private rateLimits = new Map<string, number[]>();
 
   async saveInvoice(nonce: string, invoice: PaymentInvoice): Promise<void> {
     this.invoices.set(nonce, invoice);
@@ -66,6 +74,21 @@ export class MemoryPaymentStore implements PaymentStore {
   }
   async getReceipt(signature: string): Promise<SettlementReceipt | undefined> {
     return this.receipts.get(signature);
+  }
+  async rateLimit(identifier: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {
+    const now = Date.now();
+    const windowMs = windowSeconds * 1000;
+    let timestamps = this.rateLimits.get(identifier) || [];
+    timestamps = timestamps.filter(t => t > now - windowMs);
+
+    if (timestamps.length >= limit) {
+      this.rateLimits.set(identifier, timestamps);
+      return { allowed: false, remaining: 0, resetInMs: timestamps[0] + windowMs - now };
+    }
+
+    timestamps.push(now);
+    this.rateLimits.set(identifier, timestamps);
+    return { allowed: true, remaining: limit - timestamps.length, resetInMs: windowMs };
   }
 }
 
@@ -142,6 +165,28 @@ export class RedisPaymentStore implements PaymentStore {
     const c = await this.client();
     const v = await c.get(REC_PREFIX + signature);
     return v ? (JSON.parse(v) as SettlementReceipt) : undefined;
+  }
+  async rateLimit(identifier: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {
+    const c = await this.client();
+    const key = 'x402:rl:' + identifier;
+    const now = Date.now();
+    const windowMs = windowSeconds * 1000;
+    const minScore = now - windowMs;
+    const member = now + ':' + Math.random().toString(36).substring(2, 8);
+
+    const pipeline = c.pipeline();
+    pipeline.zremrangebyscore(key, 0, minScore);
+    pipeline.zadd(key, now, member);
+    pipeline.zcard(key);
+    pipeline.expire(key, windowSeconds + 1);
+
+    const results = await pipeline.exec();
+    const countRes = results?.[2]?.[1];
+    const count = typeof countRes === 'number' ? countRes : limit + 1;
+
+    const allowed = count <= limit;
+    const remaining = Math.max(0, limit - count);
+    return { allowed, remaining, resetInMs: windowMs };
   }
 
   async close(): Promise<void> {
