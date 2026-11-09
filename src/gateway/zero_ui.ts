@@ -148,6 +148,24 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
           </div>
         </div>
       </div>
+
+      <!-- S2S 双轨定价与任务竞标面板 (Dual-Track Bidding & Escrow) -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>⚖️ S2S DUAL-TRACK PRICING & ESCROW BIDS</span>
+          <span style="font-size: 0.8rem; color: var(--accent-gold);">Spot (x402) + Escrow Bids</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.85rem;">
+          <div style="background: #030407; padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
+            <div style="color: var(--accent-cyan); font-weight: bold; margin-bottom: 0.5rem;">Track 1: x402 Spot Micropayments</div>
+            <div style="color: #94a3b8; font-size: 0.8rem;">Instant pay-per-call access to premium alpha signals. 4 tiers (Standard to Institutional). Verified on-chain via Solana/USDC.</div>
+          </div>
+          <div style="background: #030407; padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
+            <div style="color: var(--accent-gold); font-weight: bold; margin-bottom: 0.5rem;">Track 2: Task Bidding & Escrow</div>
+            <div style="color: #94a3b8; font-size: 0.8rem;">Long-cycle quant or data scraping tasks with escrowed funds, SLA timeout failovers, and karma reputation tracking.</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 右侧系统统计与多链速览 -->

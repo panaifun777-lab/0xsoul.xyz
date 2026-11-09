@@ -200,6 +200,33 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
 
     this.fastify.get("/v1/terminal/state", async () => terminalPayload);
 
+    // S2S 双轨定价：任务竞标与托管端点 (Task Bidding & Escrow)
+    this.fastify.post("/v1/tasks/bids", async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = req.body as { description?: string; escrowAmount?: number; slaWindowSeconds?: number; client?: string };
+      if (!body || !body.description || !body.escrowAmount) {
+        return reply.status(400).send({ success: false, error: "Missing description or escrowAmount" });
+      }
+      const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const bid = {
+        taskId,
+        client: body.client || "anonymous_agent",
+        description: body.description,
+        escrowAmount: body.escrowAmount,
+        status: "pending" as const,
+        createdAt: Date.now(),
+        slaWindowSeconds: body.slaWindowSeconds || 300,
+      };
+      if (this.store) {
+        await this.store.saveTaskBid(taskId, bid);
+      }
+      return { success: true, taskId, bid };
+    });
+
+    this.fastify.get("/v1/tasks/bids", async (req: FastifyRequest, reply: FastifyReply) => {
+      const bids = this.store ? await this.store.listTaskBids() : [];
+      return { success: true, count: bids.length, bids };
+    });
+
     // 阶梯定价查询 API
     this.fastify.post("/api/domain/price", async (req: FastifyRequest, reply: FastifyReply) => {
       const body = req.body as { domain?: string };

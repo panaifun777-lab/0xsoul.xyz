@@ -22,6 +22,16 @@
 
 import type { PaymentInvoice, SettlementReceipt } from './middleware';
 
+export interface TaskBid {
+  taskId: string;
+  client: string;
+  description: string;
+  escrowAmount: number; // SOL
+  status: 'pending' | 'assigned' | 'completed' | 'refunded';
+  createdAt: number;
+  slaWindowSeconds: number;
+}
+
 export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
@@ -38,16 +48,25 @@ export interface PaymentStore {
   saveReceipt(signature: string, receipt: SettlementReceipt): Promise<void>;
   getReceipt(signature: string): Promise<SettlementReceipt | undefined>;
   rateLimit(identifier: string, limit: number, windowSeconds: number): Promise<RateLimitResult>;
+  saveTaskBid(taskId: string, bid: TaskBid): Promise<void>;
+  getTaskBid(taskId: string): Promise<TaskBid | undefined>;
+  listTaskBids(): Promise<TaskBid[]>;
+  adjustKarma(identifier: string, delta: number): Promise<number>;
+  getKarma(identifier: string): Promise<number>;
 }
 
 const INV_PREFIX = 'x402:inv:';
 const REC_PREFIX = 'x402:rec:';
+const BID_PREFIX = 'x402:bid:';
+const KARMA_PREFIX = 'x402:karma:';
 const CONSUMED_KEY = 'x402:consumed';
 
 /** 默认实现：进程内内存存储（无外部依赖） */
 export class MemoryPaymentStore implements PaymentStore {
   private invoices = new Map<string, PaymentInvoice>();
   private receipts = new Map<string, SettlementReceipt>();
+  private bids = new Map<string, TaskBid>();
+  private karmaMap = new Map<string, number>();
   private consumed = new Set<string>();
   private rateLimits = new Map<string, number[]>();
 
@@ -89,6 +108,24 @@ export class MemoryPaymentStore implements PaymentStore {
     timestamps.push(now);
     this.rateLimits.set(identifier, timestamps);
     return { allowed: true, remaining: limit - timestamps.length, resetInMs: windowMs };
+  }
+  async saveTaskBid(taskId: string, bid: TaskBid): Promise<void> {
+    this.bids.set(taskId, bid);
+  }
+  async getTaskBid(taskId: string): Promise<TaskBid | undefined> {
+    return this.bids.get(taskId);
+  }
+  async listTaskBids(): Promise<TaskBid[]> {
+    return Array.from(this.bids.values());
+  }
+  async adjustKarma(identifier: string, delta: number): Promise<number> {
+    const current = this.karmaMap.get(identifier) ?? 100;
+    const updated = Math.max(0, Math.min(200, current + delta));
+    this.karmaMap.set(identifier, updated);
+    return updated;
+  }
+  async getKarma(identifier: string): Promise<number> {
+    return this.karmaMap.get(identifier) ?? 100;
   }
 }
 
@@ -187,6 +224,55 @@ export class RedisPaymentStore implements PaymentStore {
     const allowed = count <= limit;
     const remaining = Math.max(0, limit - count);
     return { allowed, remaining, resetInMs: windowMs };
+  }
+
+  async saveTaskBid(taskId: string, bid: TaskBid): Promise<void> {
+    const c = await this.client();
+    const pipeline = c.pipeline();
+    pipeline.set(BID_PREFIX + taskId, JSON.stringify(bid));
+    pipeline.sadd('x402:bids:index', taskId);
+    await pipeline.exec();
+  }
+  async getTaskBid(taskId: string): Promise<TaskBid | undefined> {
+    const c = await this.client();
+    const v = await c.get(BID_PREFIX + taskId);
+    return v ? (JSON.parse(v) as TaskBid) : undefined;
+  }
+  async listTaskBids(): Promise<TaskBid[]> {
+    const c = await this.client();
+    const ids: string[] = await c.smembers('x402:bids:index');
+    if (!ids || ids.length === 0) return [];
+    const pipeline = c.pipeline();
+    for (const id of ids) {
+      pipeline.get(BID_PREFIX + id);
+    }
+    const results = await pipeline.exec();
+    const bids: TaskBid[] = [];
+    if (results) {
+      for (const res of results) {
+        if (res && res[1]) {
+          try {
+            bids.push(JSON.parse(res[1]) as TaskBid);
+          } catch {}
+        }
+      }
+    }
+    return bids;
+  }
+  async adjustKarma(identifier: string, delta: number): Promise<number> {
+    const c = await this.client();
+    const key = KARMA_PREFIX + identifier;
+    const currentStr = await c.get(key);
+    const current = currentStr ? parseInt(currentStr, 10) : 100;
+    const updated = Math.max(0, Math.min(200, current + delta));
+    await c.set(key, String(updated));
+    return updated;
+  }
+  async getKarma(identifier: string): Promise<number> {
+    const c = await this.client();
+    const key = KARMA_PREFIX + identifier;
+    const v = await c.get(key);
+    return v ? parseInt(v, 10) : 100;
   }
 
   async close(): Promise<void> {
