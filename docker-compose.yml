@@ -24,10 +24,15 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=production
+      # x402 持久化存储：指向同网内的 redis 服务（不可达时网关安全回退内存）
+      - REDIS_URL=redis://redis:6379
     ports:
       - "3000:3000"
     volumes:
       - gang-telemetry-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/v1/terminal/state || exit 1"]
       interval: 15s
@@ -84,8 +89,28 @@ services:
     networks:
       - gang-internal-net
 
+  # ------------------------------------------------------
+  # 4. 支付状态持久化存储（Redis）—— x402 发票/签名/回执跨重启不丢
+  # ------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: gang-soul-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - gang-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - gang-internal-net
+
 volumes:
   gang-telemetry-data:
+    driver: local
+  gang-redis-data:
     driver: local
 
 networks:

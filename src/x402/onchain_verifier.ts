@@ -26,6 +26,44 @@
  */
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { PaymentStore, MemoryPaymentStore } from './store';
+
+/** Solana SPL Token 程序 ID（标准代币程序） */
+export const SPL_TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+/** 关联代币账户（ATA）程序 ID */
+export const ASSOCIATED_TOKEN_PROGRAM_ID = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+/** 主网 USDC 铸币地址（SPL Token-2022 前的经典 USDC） */
+export const USDC_MAINNET_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkYWw4cRT';
+
+/**
+ * 由钱包地址 + 代币 mint 推导其关联代币账户（ATA）。
+ *
+ * ATA = PDA([wallet, TOKEN_PROGRAM, mint], ASSOCIATED_TOKEN_PROGRAM)。
+ * 由于 ATA 已把 mint 编码进地址，只要转账目标 ATA 与
+ * deriveAssociatedTokenAddress(wallet, mint) 一致，就同时证明了
+ * “收款方钱包正确” 与 “代币为指定 mint（如 USDC）”。
+ */
+export function deriveAssociatedTokenAddress(wallet: string, mint: string): string {
+  const [ata] = PublicKey.findProgramAddressSync(
+    [
+      new PublicKey(wallet).toBuffer(),
+      new PublicKey(SPL_TOKEN_PROGRAM_ID).toBuffer(),
+      new PublicKey(mint).toBuffer(),
+    ],
+    new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ID),
+  );
+  return ata.toBase58();
+}
+
+/** 单笔链上 SPL 代币转账事实 */
+export interface TokenTransfer {
+  /** 接收方关联代币账户（ATA） */
+  recipient: string;
+  /** 转账金额（代币最小单位，raw units，非小数） */
+  amount: bigint;
+  /** 代币精度（decimals）；Transfer 指令无法携带时记为 0 */
+  decimals: number;
+}
 
 /** 单笔链上支付的事实（从链上解析而来） */
 export interface OnChainPaymentFact {
@@ -35,7 +73,7 @@ export interface OnChainPaymentFact {
   success: boolean;
   /** 实际付款方（转账指令的 from） */
   payer: string;
-  /** 实际收款方（转账指令的 to） */
+  /** 实际收款方（SOL 系统转账的 to） */
   recipient: string;
   /** 实际转账金额（lamports） */
   lamports: bigint;
@@ -43,14 +81,20 @@ export interface OnChainPaymentFact {
   blockTime: number;
   /** 是否已确认 */
   confirmed: boolean;
+  /** 本交易中所有的 SPL 代币转账（USDC 等） */
+  tokenTransfers: TokenTransfer[];
 }
 
 /** 期望的付款条件（来自账单） */
 export interface ExpectedPayment {
-  /** 期望收款地址 */
-  recipient: string;
-  /** 期望最低金额（lamports） */
-  minLamports: bigint;
+  /** 期望收款地址（SOL 系统转账时校验） */
+  recipient?: string;
+  /** 期望最低金额（lamports，SOL 系统转账时校验） */
+  minLamports?: bigint;
+  /** 期望的 SPL 代币收款 ATA（如 USDC ATA）；提供则改为校验代币转账 */
+  expectedTokenRecipient?: string;
+  /** 期望代币最低金额（raw units，如 USDC 的 6 位精度整数） */
+  expectedTokenMinAmount?: bigint;
   /** 可选的期望付款方（为空则不校验） */
   expectedPayer?: string;
   /** 交易时间容差（秒），默认 600 秒 = 10 分钟 */
@@ -97,23 +141,42 @@ export function createSolanaPaymentQuery(connection: Connection): PaymentQueryFn
     let payer = '';
     let recipient = '';
     let lamports = 0n;
+    const tokenTransfers: TokenTransfer[] = [];
 
     for (const ix of message.compiledInstructions || (message as any).instructions || []) {
       const programId: PublicKey = accountKeys[ix.programIdIndex];
-      if (programId.toBase58() !== '11111111111111111111111111111111') continue;
+      const programStr = programId.toBase58();
 
-      // system transfer 指令数据：u32 LE 类型 = 2，后跟 u64 LE 金额
-      const dataHex = typeof ix.data === 'string' ? ix.data : Buffer.from(ix.data).toString('base64');
-      const dataBuf =
-        typeof ix.data === 'string' ? Buffer.from(ix.data, 'base64') : Buffer.from(ix.data);
-      if (dataBuf.length < 12) continue;
-      const ixType = dataBuf.readUInt32LE(0);
-      if (ixType !== 2) continue;
+      // ---- SOL 系统转账：program = 1111...1111，u32 LE 类型 = 2，后跟 u64 LE 金额 ----
+      if (programStr === '11111111111111111111111111111111') {
+        const dataBuf =
+          typeof ix.data === 'string' ? Buffer.from(ix.data, 'base64') : Buffer.from(ix.data);
+        if (dataBuf.length >= 12 && dataBuf.readUInt32LE(0) === 2) {
+          payer = accountKeys[ix.accountKeyIndexes?.[0] ?? (ix as any).accounts?.[0] ?? 0].toBase58();
+          recipient = accountKeys[ix.accountKeyIndexes?.[1] ?? (ix as any).accounts?.[1] ?? 1].toBase58();
+          lamports = dataBuf.readBigUInt64LE(4);
+        }
+        continue;
+      }
 
-      payer = accountKeys[ix.accountKeyIndexes?.[0] ?? (ix as any).accounts?.[0] ?? 0].toBase58();
-      recipient = accountKeys[ix.accountKeyIndexes?.[1] ?? (ix as any).accounts?.[1] ?? 1].toBase58();
-      lamports = dataBuf.readBigUInt64LE(4);
-      break;
+      // ---- SPL 代币转账：program = Tokenkeg...，Transfer(3) / TransferChecked(12) ----
+      if (programStr === SPL_TOKEN_PROGRAM_ID) {
+        const dataBuf =
+          typeof ix.data === 'string' ? Buffer.from(ix.data, 'base64') : Buffer.from(ix.data);
+        if (dataBuf.length < 9) continue;
+        const ixType = dataBuf.readUInt8(0);
+        if (ixType !== 3 && ixType !== 12) continue;
+        // u64 LE 金额位于 data[1..9]
+        const amount = dataBuf.readBigUInt64LE(1);
+        const destIdx = ix.accountKeyIndexes?.[1] ?? (ix as any).accounts?.[1];
+        if (destIdx === undefined) continue;
+        const decimals = ixType === 12 && dataBuf.length >= 10 ? dataBuf.readUInt8(9) : 0;
+        tokenTransfers.push({
+          recipient: accountKeys[destIdx].toBase58(),
+          amount,
+          decimals,
+        });
+      }
     }
 
     return {
@@ -124,6 +187,7 @@ export function createSolanaPaymentQuery(connection: Connection): PaymentQueryFn
       lamports,
       blockTime: tx.blockTime ?? 0,
       confirmed: true,
+      tokenTransfers,
     };
   };
 }
@@ -143,22 +207,49 @@ export function validatePaymentFact(
   if (!fact.success) {
     return { valid: false, error: 'Transaction execution failed on-chain', fact };
   }
-  if (fact.lamports <= 0n) {
-    return { valid: false, error: 'Transaction contains no SOL transfer', fact };
-  }
-  if (fact.recipient !== expected.recipient) {
-    return {
-      valid: false,
-      error: `Recipient mismatch: expected ${expected.recipient}, got ${fact.recipient || '<none>'}`,
-      fact,
-    };
-  }
-  if (fact.lamports < expected.minLamports) {
-    return {
-      valid: false,
-      error: `Insufficient payment: required ${expected.minLamports} lamports, got ${fact.lamports}`,
-      fact,
-    };
+  if (expected.expectedTokenRecipient && expected.expectedTokenMinAmount !== undefined) {
+    // ---- SPL 代币（USDC 等）付款校验 ----
+    const match = fact.tokenTransfers.find(
+      (t) =>
+        t.recipient === expected.expectedTokenRecipient &&
+        t.amount >= expected.expectedTokenMinAmount,
+    );
+    if (!match) {
+      const found = fact.tokenTransfers.length
+        ? fact.tokenTransfers.map((t) => `${t.recipient}:${t.amount}`).join(', ')
+        : 'none';
+      return {
+        valid: false,
+        error: `Token payment mismatch: expected >= ${expected.expectedTokenMinAmount} to ${expected.expectedTokenRecipient}, got ${found}`,
+        fact,
+      };
+    }
+  } else {
+    // ---- SOL 系统转账校验（原逻辑）----
+    if (!expected.recipient || expected.minLamports === undefined) {
+      return {
+        valid: false,
+        error: 'No payment expectation specified (neither SOL nor SPL token)',
+        fact,
+      };
+    }
+    if (fact.lamports <= 0n) {
+      return { valid: false, error: 'Transaction contains no SOL transfer', fact };
+    }
+    if (fact.recipient !== expected.recipient) {
+      return {
+        valid: false,
+        error: `Recipient mismatch: expected ${expected.recipient}, got ${fact.recipient || '<none>'}`,
+        fact,
+      };
+    }
+    if (fact.lamports < expected.minLamports) {
+      return {
+        valid: false,
+        error: `Insufficient payment: required ${expected.minLamports} lamports, got ${fact.lamports}`,
+        fact,
+      };
+    }
   }
   if (expected.expectedPayer && fact.payer !== expected.expectedPayer) {
     return {
@@ -202,15 +293,24 @@ export function solToLamports(sol: number): bigint {
  */
 export class OnChainPaymentVerifier {
   private query: PaymentQueryFn;
-  /** 已消费的交易签名（防重放） */
-  private consumedSignatures: Set<string> = new Set();
   /** 是否启用真实链上校验（false 时降级为拒绝，绝不静默放行） */
   private enabled: boolean;
+  /** 已消费签名集合（防重放），默认内存，可注入 Redis 实现跨重启持久 */
+  private store: PaymentStore;
 
-  constructor(query: PaymentQueryFn | null, options?: { enabled?: boolean }) {
+  constructor(
+    query: PaymentQueryFn | null,
+    options?: { enabled?: boolean; store?: PaymentStore },
+  ) {
     this.enabled = Boolean(query) && (options?.enabled ?? true);
     // 未启用时用一个永远返回 null 的查询器，确保任何验款都失败（Fail-Closed）
     this.query = query || (async () => null);
+    this.store = options?.store || new MemoryPaymentStore();
+  }
+
+  /** 注入持久化后端（与 X402PaymentEngine 共享同一存储） */
+  public setStore(store: PaymentStore): void {
+    this.store = store;
   }
 
   public isEnabled(): boolean {
@@ -232,8 +332,8 @@ export class OnChainPaymentVerifier {
       return { valid: false, error: 'Malformed transaction signature' };
     }
 
-    // 防重放：同一签名只能用一次
-    if (this.consumedSignatures.has(signature)) {
+    // 防重放：同一签名只能用一次（持久化，跨重启有效）
+    if (await this.store.isConsumed(signature)) {
       return { valid: false, error: 'Payment signature has already been consumed (replay blocked)' };
     }
 
@@ -250,18 +350,18 @@ export class OnChainPaymentVerifier {
 
     const result = validatePaymentFact(fact, expected);
     if (result.valid) {
-      this.consumedSignatures.add(signature);
+      await this.store.markConsumed(signature);
     }
     return result;
   }
 
   /** 仅用于测试：手动标记签名已消费 */
   public markConsumed(signature: string): void {
-    this.consumedSignatures.add(signature);
+    void this.store.markConsumed(signature);
   }
 
   /** 已消费签名数量（用于观测） */
-  public consumedCount(): number {
-    return this.consumedSignatures.size;
+  public async consumedCount(): Promise<number> {
+    return this.store.consumedCount();
   }
 }

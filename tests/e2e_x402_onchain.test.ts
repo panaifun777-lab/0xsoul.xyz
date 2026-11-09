@@ -163,7 +163,8 @@ async function runX402OnChainSuite() {
   const second = await verifier.verify(sig, expected);
   check('二次使用同一签名被拦截', second.valid === false);
   check('错误信息提示 replay', (second.error || '').toLowerCase().includes('replay'), second.error);
-  check('已消费签名计数为 1', verifier.consumedCount() === 1, `${verifier.consumedCount()}`);
+  const consumed = await verifier.consumedCount();
+  check('已消费签名计数为 1', consumed === 1, `${consumed}`);
 
   /* ================================================================
    * 测试 8: [KPI-P3-8] 未配置 RPC 时 Fail-Closed
@@ -213,7 +214,7 @@ async function runX402OnChainSuite() {
   });
   check('注入后切换为链上模式', mockEngine.isOnChainMode() === true);
 
-  const invoice = mockEngine.createInvoice(0.001, 0.05);
+  const invoice = await mockEngine.createInvoice(0.001, 0.05);
   check('发票收款方正确', invoice.recipientVault === RECIPIENT, invoice.recipientVault.slice(0, 12) + '...');
   check('发票金额正确', invoice.amountSol === 0.001, `${invoice.amountSol} SOL`);
   check('solToLamports(0.001) === 1000000', solToLamports(0.001) === 1_000_000n);

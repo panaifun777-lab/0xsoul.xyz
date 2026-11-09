@@ -17,7 +17,7 @@
     "init:curve": "tsx scripts/init_curve.ts",
     "squads:init": "tsx scripts/init_squads_treasury.ts",
     "verify:docs": "node scripts/verify_docs.js",
-    "test": "tsx tests/mcp_production.test.ts && tsx tests/mcp_live_execution.test.ts && tsx tests/docker_verification.test.ts && tsx tests/solana_deployment_squads.test.ts"
+    "test": "tsx tests/mcp_production.test.ts && tsx tests/mcp_live_execution.test.ts && tsx tests/docker_verification.test.ts && tsx tests/solana_deployment_squads.test.ts && tsx tests/test_x402_dynamic_thought.ts && tsx tests/e2e_x402_onchain.test.ts && tsx tests/p1_x402_features.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -33,6 +33,7 @@
     "ed25519-hd-key": "^2.0.0",
     "ethers": "^6.17.0",
     "fastify": "^5.12.8",
+    "ioredis": "^6.0.0",
     "solc": "^0.8.38",
     "tweetnacl": "^1.0.3"
   },

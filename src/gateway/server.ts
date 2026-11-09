@@ -9,11 +9,15 @@ import { createHash } from "crypto";
 import {
   X402PaymentEngine,
   AlphaSignalData,
+  type PaymentAsset,
 } from "../x402/middleware";
 import {
   OnChainPaymentVerifier,
   createSolanaPaymentQuery,
 } from "../x402/onchain_verifier";
+import { resolveTier, priceForAsset, TIER_PRICING } from "../x402/pricing";
+import { buildAttestation } from "../x402/attestation";
+import { createPaymentStore } from "../x402/store";
 
 export class GangSoulGateway {
   private fastify = Fastify({ logger: false });
@@ -71,6 +75,10 @@ export class GangSoulGateway {
   async start(port?: number, host?: string) {
     await this.fastify.register(cors, { origin: true });
 
+    // 持久化存储升级：若配置了 REDIS_URL，则探测后切换到 Redis（不可达则安全回退内存）
+    const store = await createPaymentStore();
+    this.engine.setStore(store);
+
     // 增强版机器可读遥测数据与多链资产矩阵
     const terminalPayload = {
       success: true,
@@ -78,8 +86,21 @@ export class GangSoulGateway {
       version: "2.6.0",
       x402: {
         mode: this.engine.isOnChainMode() ? "onchain" : "memory",
+        store: this.engine.getStoreType(),
         endpoint: "/v1/signals/alpha",
         feeSol: Number(process.env.ALPHA_SIGNAL_FEE_SOL || 0.005),
+        tiers: Object.entries(TIER_PRICING).map(([key, p]) => ({
+          tier: key,
+          label: p.label,
+          sol: p.sol,
+          usdc: p.usdc,
+          signalCount: p.signalCount,
+        })),
+        attestation: {
+          enabled: true,
+          scheme: "sha256(thoughtHash|paymentNonce|txSignature|payer|recipientVault|amount|salt)",
+          note: "付费响应附带 attestationHash，买方可用公开盐独立复算验证网关对该 thoughtHash 的背书",
+        },
       },
       multichain: {
         arc: ARC_PRODUCTION_CONFIG,
@@ -201,6 +222,7 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
 
     // x402 高阶 Alpha 信号微支付端点
     // 未付费 → 402 + 发票；携带 x-payment-nonce / x-payment-signature → 验款后返回信号与结算回执
+    // 支持 ?tier= 选择档位、?asset=usdc 选择 USDC(SPL) 结算
     this.fastify.get(
       "/v1/signals/alpha",
       async (req: FastifyRequest, reply: FastifyReply) => {
@@ -209,14 +231,21 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
           | string
           | undefined;
 
+        const query = (req.query || {}) as { tier?: string; asset?: string };
+        const requestedTier = query.tier;
+        const asset: PaymentAsset =
+          query.asset === "usdc" ? "USDC" : "SOL";
+        const { tier, price } = resolveTier(requestedTier);
+        const cost = priceForAsset(price, asset);
+
         if (!nonce || !signature) {
           const signals = this.buildAlphaSignals();
           const thoughtHash = this.buildThoughtHash(signals[0]);
-          const invoice = this.engine.createInvoice(
-            Number(process.env.ALPHA_SIGNAL_FEE_SOL || 0.005),
-            0.25,
+          const invoice = await this.engine.createInvoice(
+            asset === "USDC" ? 0 : cost, // USDC 结算时 SOL 金额为 0
+            asset === "USDC" ? cost : price.usdc,
             120,
-            { tier: "PREMIUM_ALPHA_SNIPER", thoughtHash },
+            { tier, thoughtHash, asset },
           );
           return reply.status(402).send({
             error: "Payment required to access premium alpha signals",
@@ -226,7 +255,7 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
 
         const result = this.engine.isOnChainMode()
           ? await this.engine.verifyPaymentOnChain(nonce, signature)
-          : this.engine.verifyPayment(nonce, signature);
+          : await this.engine.verifyPayment(nonce, signature);
 
         if (!result.valid) {
           return reply.status(402).send({
@@ -236,12 +265,19 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
         }
 
         const signals = this.buildAlphaSignals();
-        const receipt = this.engine.getSettlementReceipt(signature);
+        const receipt = await this.engine.getSettlementReceipt(signature);
+        // 买方 attestation：把 thoughtHash 与该笔付款不可抵赖地绑定，买方可用公开盐复算验证
+        const attestation = receipt
+          ? buildAttestation(receipt, this.engine.getRecipientVault().toBase58())
+          : undefined;
+
         return reply.send({
           success: true,
+          tier,
           signals,
           paymentSettled: true,
           receipt,
+          attestation,
         });
       },
     );

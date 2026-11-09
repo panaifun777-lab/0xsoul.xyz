@@ -9,7 +9,7 @@ async function testX402DynamicAndThoughtStream() {
 
   // 1. 创建带有动态定价档位和链上思考流哈希的账单
   const thoughtHash = '0xabc123thoughtstreamhash890def';
-  const invoice = engine.createInvoice(0.005, 0.25, 120, {
+  const invoice = await engine.createInvoice(0.005, 0.25, 120, {
     thoughtHash,
     tier: 'PREMIUM_ALPHA_SNIPER',
   });
@@ -18,19 +18,20 @@ async function testX402DynamicAndThoughtStream() {
   console.log(`  - Nonce: ${invoice.paymentNonce}`);
   console.log(`  - 金额: ${invoice.amountSol} SOL (${invoice.amountUsdc} USDC)`);
   console.log(`  - 档位: ${invoice.tier}`);
+  console.log(`  - 结算资产: ${invoice.asset}`);
   console.log(`  - 思考流哈希 (Thought Hash): ${invoice.thoughtHash}`);
 
   // 2. 模拟支付并核验
   const fakeTxSig = '5Kz8...fakeSolanaTxSignatureWithThoughtHash';
-  const verifyResult = engine.verifyPayment(invoice.paymentNonce, fakeTxSig, 0.005);
-  
+  const verifyResult = await engine.verifyPayment(invoice.paymentNonce, fakeTxSig, 0.005);
+
   if (!verifyResult.valid) {
     throw new Error(`❌ 支付验证失败: ${verifyResult.error}`);
   }
   console.log('✅ x402 支付验证通过！');
 
   // 3. 获取结算回执并验证 Thought Hash 审计闭环
-  const receipt = engine.getSettlementReceipt(fakeTxSig);
+  const receipt = await engine.getSettlementReceipt(fakeTxSig);
   if (receipt && receipt.thoughtHash === thoughtHash) {
     console.log('✅ [支付即证明闭环成功] 结算回执成功捕获 Thought Hash:');
     console.log(`  - 交易签名: ${receipt.txSignature}`);
