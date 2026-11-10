@@ -28,6 +28,7 @@ import {
   initialSeedArcState,
   type ArcTokenState,
 } from "../chain/arc_token_reader";
+import { ArcActivityWatcher } from "../chain/arc_activity_ws";
 import { buildAttestation } from "../x402/attestation";
 import {
   createPaymentStore,
@@ -50,6 +51,9 @@ export class GangSoulGateway {
   private arcState: ArcTokenState = initialSeedArcState();
   private arcExpiresAt = 0;
   private arcRefreshTimer?: ReturnType<typeof setInterval>;
+
+  /** ARC 链上实时活动订阅器（WSS 订阅 Transfer 事件） */
+  private arcActivity?: ArcActivityWatcher;
 
   constructor(clusterManager?: SolanaAgentClusterManager) {
     this.cluster =
@@ -334,6 +338,13 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
             fallbackReason: this.arcState.fallbackReason,
           },
           plannedTotalSupplyTokens: this.arcState.plannedTotalSupplyTokens,
+          activity: this.arcActivity?.getState() || {
+            source: "offline",
+            wssConnected: false,
+            subscribedSince: null,
+            totalObserved: 0,
+            recent: [],
+          },
         },
         serverTime: Date.now(),
       };
@@ -537,6 +548,10 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
       () => void this.refreshArcState(),
       30000,
     );
+
+    // 启动 ARC 链上实时活动订阅（WSS 订阅 Transfer 事件），用于面板真实活动流。
+    this.arcActivity = new ArcActivityWatcher();
+    this.arcActivity.start();
   }
 
   async stop() {

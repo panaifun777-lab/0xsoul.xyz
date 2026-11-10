@@ -419,6 +419,18 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         </div>
       </div>
 
+      <!-- ARC 链上实时活动面板（WSS 订阅真实 Transfer 事件） -->
+      <div class="panel">
+        <div class="panel-title">
+          <span data-en="🔴 ARC Live On-chain Activity">🔴 ARC 链上实时活动</span>
+          <span id="arc-act-badge" class="badge" style="font-size:0.7rem;color:#f0b429;background:rgba(240,180,41,0.12);padding:2px 8px;border-radius:99px;border:1px solid rgba(240,180,41,0.4)" data-en="Connecting…">连接中…</span>
+        </div>
+        <div id="arc-activity-list" style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.78rem;max-height:190px;overflow-y:auto;">
+          <div id="arc-activity-empty" style="color:#64748b" data-en="No transfers yet — token launch pending.">暂无转账活动 — 代币待启动。</div>
+        </div>
+        <div style="margin-top:0.5rem;font-size:0.68rem;color:#64748b;" data-en="Observed: ">累计观察: <span id="arc-act-count">0</span> <span data-en="transfers (since "> 笔（自 </span><span id="arc-act-since">—</span><span data-en=")">）</span></div>
+      </div>
+
       <!-- 实时活动日志终端 (Live Activity Stream / 瀑布流) -->
       <div class="panel">
         <div class="panel-title">
@@ -784,8 +796,66 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
           markBadge(document.getElementById('arc-supply-badge'));
           markBadge(document.getElementById('wp-arc-badge'));
         }
+
+        // ARC 链上实时活动流（WSS 订阅 Transfer 事件）
+        renderArcActivity(data && data.arc && data.arc.activity);
       } catch (err) {}
     }
+
+    function shortAddr(a) {
+      if (!a || a.length < 12) return a || '';
+      return a.slice(0, 6) + '…' + a.slice(-4);
+    }
+    function fmtNum(v) {
+      const n = Number(v);
+      if (!isFinite(n)) return String(v);
+      if (n === 0) return '0';
+      if (n < 1) return n.toPrecision(3);
+      return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    }
+    function renderArcActivity(act) {
+      if (!act) return;
+      const badge = document.getElementById('arc-act-badge');
+      if (badge) {
+        if (act.source === 'live') {
+          badge.textContent = '链上实时'; badge.style.color = '#00ff66';
+          badge.style.background = 'rgba(0,255,102,0.12)'; badge.style.borderColor = 'rgba(0,255,102,0.4)';
+          badge.setAttribute('data-en', 'On-chain Live');
+        } else {
+          badge.textContent = '离线'; badge.style.color = '#f0b429';
+          badge.style.background = 'rgba(240,180,41,0.12)'; badge.style.borderColor = 'rgba(240,180,41,0.4)';
+          badge.setAttribute('data-en', 'Offline');
+        }
+      }
+      const count = document.getElementById('arc-act-count');
+      if (count) count.textContent = act.totalObserved || 0;
+      const since = document.getElementById('arc-act-since');
+      if (since) since.textContent = act.subscribedSince ? new Date(act.subscribedSince).toLocaleTimeString() : '—';
+      const list = document.getElementById('arc-activity-list');
+      if (!list) return;
+      const recents = act.recent || [];
+      list.querySelectorAll('.arc-tx').forEach(n => n.remove());
+      const empty = document.getElementById('arc-activity-empty');
+      if (recents.length === 0) {
+        if (empty) empty.style.display = '';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+      recents.forEach(tx => {
+        const row = document.createElement('div');
+        row.className = 'arc-tx';
+        row.style.cssText = 'display:flex;justify-content:space-between;gap:0.5rem;padding:0.3rem 0.45rem;background:rgba(0,255,102,0.05);border-left:2px solid rgba(0,255,102,0.5);border-radius:4px;';
+        const left = document.createElement('div');
+        left.style.cssText = 'color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        left.innerHTML = '<span style="color:var(--accent-cyan)">' + shortAddr(tx.from) + '</span> → <span style="color:var(--accent-gold)">' + shortAddr(tx.to) + '</span>';
+        const right = document.createElement('div');
+        right.style.cssText = 'color:#00ff66;font-weight:bold;white-space:nowrap;';
+        right.textContent = fmtNum(tx.valueFormatted) + ' $0x.SOUL';
+        row.appendChild(left); row.appendChild(right);
+        list.appendChild(row);
+      });
+    }
+
     // 初始从 0 滚到默认值，即使后端慢/失败页面也"活"着
     function bootTween() {
       animateValue(document.getElementById('num-agents'), 10, 0, 1400);
