@@ -23,6 +23,11 @@ import {
   initialSeedState,
   type BondingCurveState,
 } from "../chain/bonding_curve_reader";
+import {
+  readArcTokenOnChain,
+  initialSeedArcState,
+  type ArcTokenState,
+} from "../chain/arc_token_reader";
 import { buildAttestation } from "../x402/attestation";
 import {
   createPaymentStore,
@@ -40,6 +45,11 @@ export class GangSoulGateway {
   private curveExpiresAt = 0;
   private solConnection: Connection | null = null;
   private curveRefreshTimer?: ReturnType<typeof setInterval>;
+
+  /** ARC 链上 ERC-20 代币状态缓存（真实 totalSupply / name / symbol），含来源标记 */
+  private arcState: ArcTokenState = initialSeedArcState();
+  private arcExpiresAt = 0;
+  private arcRefreshTimer?: ReturnType<typeof setInterval>;
 
   constructor(clusterManager?: SolanaAgentClusterManager) {
     this.cluster =
@@ -103,6 +113,25 @@ export class GangSoulGateway {
     } catch {
       this.curveState = initialSeedState();
       this.curveExpiresAt = now + 5000;
+    }
+  }
+
+  /**
+   * 读取并缓存 ARC 链上 ERC-20 代币状态（真实 totalSupply / name / symbol）。
+   * 任何失败（RPC 不可达 / 合约未部署 / 超时 / 异常）都回退规划种子值，
+   * 绝不抛错、绝不阻塞请求。链上成功缓存 30s，回退 5s 后重试。
+   */
+  private async refreshArcState(): Promise<void> {
+    const now = Date.now();
+    if (this.arcExpiresAt && now < this.arcExpiresAt) return;
+
+    try {
+      const st = await readArcTokenOnChain();
+      this.arcState = st;
+      this.arcExpiresAt = now + (st.source === "seed" ? 5000 : 30000);
+    } catch {
+      this.arcState = initialSeedArcState();
+      this.arcExpiresAt = now + 5000;
     }
   }
 
@@ -290,6 +319,21 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
           dataSource: cs.source,
           isGraduated: cs.isGraduated,
           fallbackReason: cs.fallbackReason,
+        },
+        arc: {
+          onchain: {
+            dataSource: this.arcState.source,
+            contractAddress: this.arcState.contractAddress,
+            chainId: this.arcState.chainId,
+            name: this.arcState.name,
+            symbol: this.arcState.symbol,
+            decimals: this.arcState.decimals,
+            totalSupplyTokens: this.arcState.totalSupplyTokens,
+            totalSupplyFormatted: this.arcState.totalSupplyFormatted,
+            totalSupplyRaw: this.arcState.totalSupplyRaw,
+            fallbackReason: this.arcState.fallbackReason,
+          },
+          plannedTotalSupplyTokens: this.arcState.plannedTotalSupplyTokens,
         },
         serverTime: Date.now(),
       };
@@ -482,6 +526,15 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
     if (this.curveRefreshTimer) clearInterval(this.curveRefreshTimer);
     this.curveRefreshTimer = setInterval(
       () => void this.refreshCurveState(),
+      30000,
+    );
+
+    // 启动 ARC 链上 ERC-20 代币状态读取（真实 totalSupply / name / symbol），
+    // 每 30s 刷新缓存；读取失败自动回退规划种子值。
+    void this.refreshArcState();
+    if (this.arcRefreshTimer) clearInterval(this.arcRefreshTimer);
+    this.arcRefreshTimer = setInterval(
+      () => void this.refreshArcState(),
       30000,
     );
   }

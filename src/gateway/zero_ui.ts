@@ -474,6 +474,14 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
             <span style="color: #64748b;" data-en="Max Wallet Cap:">单钱包上限:</span>
             <span style="color: var(--accent-gold); font-weight: bold;">1% (10,730,000)</span>
           </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: #64748b;" data-en="ARC On-chain Supply:">ARC 链上总量(实时):</span>
+            <span class="glow-val" style="color: var(--accent-green); font-weight: bold;">
+              <span class="num" id="num-arc-supply">0</span>
+              <span data-en=" $0x.SOUL"> $0x.SOUL</span>
+              <span id="arc-supply-badge" class="badge" style="font-size:0.62rem;padding:1px 7px;background:rgba(240,180,41,0.12);color:#f0b429;border:1px solid rgba(240,180,41,0.4)" data-en="Demo">演示</span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -750,6 +758,32 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         const grad = data && data.graduation;
         const demoNote = document.getElementById('grad-demo-note');
         if (demoNote) demoNote.style.display = (grad && grad.dataSource === 'onchain') ? 'none' : '';
+
+        // ARC 链上真实总量：链上读取成功则显示真实值并标绿，回退种子值则标演示
+        const arc = data && data.arc && data.arc.onchain;
+        if (arc) {
+          const val = arc.totalSupplyFormatted ||
+            (arc.totalSupplyTokens != null ? String(arc.totalSupplyTokens) : '0');
+          const isOnchain = arc.dataSource === 'onchain';
+          const el = document.getElementById('num-arc-supply');
+          if (el) animateValue(el, Number(val) || 0, val.includes('.') ? 4 : 0);
+          const wp = document.getElementById('wp-arc-supply');
+          if (wp) wp.textContent = Number(val).toLocaleString('en-US', { maximumFractionDigits: 6 });
+          const markBadge = (b) => {
+            if (!b) return;
+            if (isOnchain) {
+              b.textContent = '链上真实'; b.style.background = 'rgba(0,255,102,0.12)';
+              b.style.color = '#00ff66'; b.style.borderColor = 'rgba(0,255,102,0.4)';
+              b.setAttribute('data-en', 'On-chain');
+            } else {
+              b.textContent = '演示'; b.style.background = 'rgba(240,180,41,0.12)';
+              b.style.color = '#f0b429'; b.style.borderColor = 'rgba(240,180,41,0.4)';
+              b.setAttribute('data-en', 'Demo');
+            }
+          };
+          markBadge(document.getElementById('arc-supply-badge'));
+          markBadge(document.getElementById('wp-arc-badge'));
+        }
       } catch (err) {}
     }
     // 初始从 0 滚到默认值，即使后端慢/失败页面也"活"着
@@ -758,6 +792,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
       animateValue(document.getElementById('num-profit'), 0.4182, 4, 1400);
       animateValue(document.getElementById('num-raised'), 4.8, 2, 1400);
       animateValue(document.getElementById('num-pct'), 9.6, 1, 1400);
+      animateValue(document.getElementById('num-arc-supply'), 0, 4, 1400);
     }
     bootTween();
     fetchTerminalState();
@@ -1052,7 +1087,8 @@ export const DOCS_UI_HTML = `<!DOCTYPE html>
       <h3 data-en="Token Economy (Pioneer Token $0x.SOUL / $GSOUL)">代币经济（先锋代币 $0x.SOUL / $GSOUL）</h3>
       <table>
         <tr><th data-en="Dimension">维度</th><th data-en="Setting">设定</th></tr>
-        <tr><td data-en="Total Supply">总供应</td><td>1,073,000,000 $0x.SOUL</td></tr>
+        <tr><td data-en="Total Supply (Planned)">总供应 (规划)</td><td>1,073,000,000 $0x.SOUL</td></tr>
+        <tr><td data-en="ARC On-chain Minted">ARC 链上已铸造 (实时)</td><td><span id="wp-arc-supply">—</span> $0x.SOUL <span id="wp-arc-badge" class="badge" style="font-size:0.62rem;padding:1px 7px;background:rgba(240,180,41,0.12);color:#f0b429;border:1px solid rgba(240,180,41,0.4)" data-en="Demo">演示</span></td></tr>
         <tr><td data-en="Max Wallet Cap">单钱包上限</td><td>1%（10,730,000 枚）防鲸鱼垄断</td></tr>
         <tr><td data-en="Graduation Target">毕业目标</td><td>50.00 SOL ➔ Raydium CPMM</td></tr>
         <tr><td data-en="Current Progress">当前进度</td><td>已筹集 4.80 SOL（9.6%）</td></tr>
