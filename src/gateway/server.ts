@@ -2,7 +2,7 @@ import Fastify, { FastifyRequest, FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import { SolanaAgentClusterManager } from "../wallet/cluster";
 import { ARC_PRODUCTION_CONFIG } from "../config/arc_production";
-import { ZERO_UI_HTML } from "./zero_ui";
+import { ZERO_UI_HTML, DOCS_UI_HTML } from "./zero_ui";
 import { DomainPricingManager } from "../soul/domain_pricing";
 import { Connection } from "@solana/web3.js";
 import { createHash } from "crypto";
@@ -15,7 +15,8 @@ import {
   OnChainPaymentVerifier,
   createSolanaPaymentQuery,
 } from "../x402/onchain_verifier";
-import { resolveTier, priceForAsset, TIER_PRICING } from "../x402/pricing";
+import { resolveTier, priceForAsset, solAmountFor, TIER_PRICING } from "../x402/pricing";
+import { MAX_WALLET_CAP_TOKENS } from "../config/tokenomics";
 import { buildAttestation } from "../x402/attestation";
 import {
   createPaymentStore,
@@ -97,7 +98,7 @@ export class GangSoulGateway {
         tiers: Object.entries(TIER_PRICING).map(([key, p]) => ({
           tier: key,
           label: p.label,
-          sol: p.sol,
+          sol: solAmountFor(p),
           usdc: p.usdc,
           signalCount: p.signalCount,
         })),
@@ -118,12 +119,12 @@ export class GangSoulGateway {
       token: {
         mint: "GgZcyZ8A2wWxULFPfjJ6deUMqmoN1QDpLnZVGkBkiVcL",
         evmToken: ARC_PRODUCTION_CONFIG.contracts.token,
-        name: "0x.SOUL Pioneer",
-        symbol: "0x.SOUL",
+        name: "0x.SOUL",
+        symbol: "GSOUL",
         uri: "https://gateway.pinata.cloud/ipfs/bafkreidc6w5pp4khqcsd572aib4kyc5j5cgdrzu3zzicmcu3lu64dc2yqm",
         icon: "https://gateway.pinata.cloud/ipfs/bafkreibuspyhjzj7tmhqq62ts7qb3zonrrd5gim4rb6zgmwbkkyo545f4e",
         liquidityDepth: {
-          arcEvmTotalSupply: "1,000,000,000 $0x.SOUL",
+          arcEvmTotalSupply: "1,073,000,000 $0x.SOUL",
           solanaVirtualSolReserves: 34.8,
           solanaVirtualTokenReserves: 925000000.0,
           totalRaisedSol: 4.8,
@@ -136,7 +137,7 @@ export class GangSoulGateway {
         strategyStatus: "Grid Market Making & Hold Line Defense Active",
         gridQuantProfitSol: 0.4182,
         maxWalletCapPercent: 1.0,
-        maxWalletCapTokens: 10000000
+        maxWalletCapTokens: MAX_WALLET_CAP_TOKENS
       },
       s2sDualTrack: {
         enabled: true,
@@ -150,8 +151,8 @@ export class GangSoulGateway {
           type: "TOKEN_LAUNCHED",
           mint: "GgZcyZ8A2wWxULFPfjJ6deUMqmoN1QDpLnZVGkBkiVcL",
           evmToken: ARC_PRODUCTION_CONFIG.contracts.token,
-          name: "0x.SOUL Pioneer",
-          symbol: "0x.SOUL",
+          name: "0x.SOUL",
+          symbol: "GSOUL",
           creator: "8qSEaqYkGGgW8qJPpyzgzTzFp11PvkB2WP6EHJcAXurB",
           initialBuySol: 4.8,
           note: "Genesis launch of $0x.SOUL across ARC Mainnet (EVM: " + ARC_PRODUCTION_CONFIG.contracts.token + ") & Solana.",
@@ -167,6 +168,11 @@ export class GangSoulGateway {
 
     this.fastify.get("/terminal", async (req, reply) => {
       reply.type("text/html").send(ZERO_UI_HTML);
+    });
+
+    // docs.0xsoul.xyz 文档 / 白皮书 / Agent 使用说明书
+    this.fastify.get("/docs", async (req, reply) => {
+      reply.type("text/html").send(DOCS_UI_HTML);
     });
 
     // 机器说明书 /llms.txt (包含多链资产与 A2A Telemetry)
@@ -358,7 +364,7 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
         "Executing automated market making tranche: BUY 0.0892 SOL at price 2.779e-8.",
         "Broadcasting Jito Bundle (tip 0.0001 SOL) to prevent sandwich attack.",
         "Checking 50 SOL graduation target progress (currently 9.6%).",
-        "Enforcing 1% max wallet cap (10,000,000 tokens) via .soul passport PDA.",
+        "Enforcing 1% max wallet cap (10,730,000 tokens) via .soul passport PDA.",
         `Verifying ARC EVM cross-chain bridge attestation (Token: ${ARC_PRODUCTION_CONFIG.contracts.token}).`
       ];
 

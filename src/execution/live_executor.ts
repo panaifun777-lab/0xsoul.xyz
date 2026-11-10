@@ -5,6 +5,7 @@
 
 import { SolanaNodeManager } from '../chain/node_manager';
 import { LatencyTelemetryManager, LatencyRecord } from '../telemetry/latency';
+import { MAX_WALLET_CAP_TOKENS } from '../config/tokenomics';
 
 export interface LiveTradeOrderParams {
   orderId: string;
@@ -37,7 +38,7 @@ export class LiveExecutionEngine {
 
   // 法律级安全风控硬顶 (Fail-Closed)
   public readonly MAX_TRANSACTION_SOL = 1.5;
-  public readonly MAX_HOLDING_TOKENS = 10_000_000; // 1% of 1B supply
+  public readonly MAX_HOLDING_TOKENS = MAX_WALLET_CAP_TOKENS; // 总供应 1% 硬顶（单一事实源：config/tokenomics）
   public readonly TOKEN_PRICE_SOL = 0.000000038;
 
   constructor(nodeManager: SolanaNodeManager, telemetryManager: LatencyTelemetryManager) {

@@ -1,17 +1,18 @@
 import { GridLevel, OrderBookQuote } from './types';
+import { MAX_WALLET_CAP_TOKENS } from '../../config/tokenomics';
 
 export interface GridMakerConfig {
   gridLevels: number;       // 网格层数 (例如 5 层)
   spacingBps: number;       // 网格间距基点 (例如 50 bps = 0.5%)
   baseOrderSol: number;     // 基准每格 SOL 金额 (例如 0.1 SOL)
-  maxInventoryTokens: number; // 单钱包代币库存硬顶 (10,000,000 枚)
+  maxInventoryTokens: number; // 单钱包代币库存硬顶（= 总供应 1%，单一事实源 config/tokenomics）
 }
 
 export const DEFAULT_GRID_CONFIG: GridMakerConfig = {
   gridLevels: 5,
   spacingBps: 60,
   baseOrderSol: 0.12,
-  maxInventoryTokens: 10_000_000,
+  maxInventoryTokens: MAX_WALLET_CAP_TOKENS,
 };
 
 /**

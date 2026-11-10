@@ -18,7 +18,7 @@ import {
   type OnChainPaymentFact,
 } from '../src/x402/onchain_verifier';
 import { X402PaymentEngine } from '../src/x402/middleware';
-import { resolveTier, priceForAsset, TIER_PRICING, DEFAULT_TIER } from '../src/x402/pricing';
+import { resolveTier, priceForAsset, solAmountFor, TIER_PRICING, DEFAULT_TIER } from '../src/x402/pricing';
 import { buildAttestation, verifyAttestation, DEFAULT_ATTESTATION_SALT } from '../src/x402/attestation';
 import { MemoryPaymentStore, createPaymentStore } from '../src/x402/store';
 import { createHash } from 'crypto';
@@ -97,10 +97,10 @@ async function run() {
   console.log('\n[P1-2] 动态档位定价表');
   const t = resolveTier('whale_alpha'); // 大小写不敏感
   check('档位大小写归一化', t.tier === 'WHALE_ALPHA');
-  check('WHALE_ALPHA 报价正确', t.price.sol === TIER_PRICING.WHALE_ALPHA.sol);
+  check('WHALE_ALPHA 报价正确', t.price.usdc === TIER_PRICING.WHALE_ALPHA.usdc);
   const fallback = resolveTier('NOT_A_TIER');
   check('非法档位回退默认档', fallback.tier === DEFAULT_TIER);
-  check('SOL 报价选择正确', priceForAsset(TIER_PRICING.INSTITUTIONAL, 'SOL') === 0.1);
+  check('SOL 报价选择正确', priceForAsset(TIER_PRICING.INSTITUTIONAL, 'SOL') === solAmountFor(TIER_PRICING.INSTITUTIONAL));
   check('USDC 报价选择正确', priceForAsset(TIER_PRICING.INSTITUTIONAL, 'USDC') === 5.0);
   check('四档齐全', Object.keys(TIER_PRICING).length === 4);
 

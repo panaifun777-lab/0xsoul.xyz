@@ -6,6 +6,7 @@ import { GraduationArbitrageEngine, DEFAULT_ARBITRAGE_CONFIG, GraduationArbitrag
 import { WhaleCopyFollowMaker, DEFAULT_WHALE_FOLLOW_CONFIG, WhaleFollowConfig, WhaleTradeSignal } from './whale_follow';
 import { MarketMakerExecutionReport, OrderBookQuote, ArbitrageOpportunity } from './types';
 import { Transaction } from '@solana/web3.js';
+import { MAX_WALLET_CAP_TOKENS } from '../../config/tokenomics';
 
 export interface MarketMakerEngineConfig {
   gridConfig?: GridMakerConfig;
@@ -88,7 +89,7 @@ export class AdvancedMarketMakingEngine {
     // 处理买单网格第一层触发 (模拟成交，严格受 1% 10,000,000 持仓硬顶约束)
     if (bids.length > 0) {
       const topBid = bids[0];
-      const remainingCapacity = Math.max(0, 10_000_000 - currentHolding);
+      const remainingCapacity = Math.max(0, MAX_WALLET_CAP_TOKENS - currentHolding);
       const desiredTokens = Math.floor(topBid.amountTokens);
       const buyTokens = Math.min(desiredTokens, remainingCapacity);
       const actualBuySol = buyTokens > 0 ? Number((buyTokens * topBid.targetPrice).toFixed(4)) : 0;

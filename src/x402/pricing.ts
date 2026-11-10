@@ -2,7 +2,12 @@
  * x402 动态档位定价表 (Dynamic Tier Pricing)
  *
  * Alpha 信号按档位差异化计价：越高档位，信号置信度/覆盖深度越高，单价越贵。
- * 价格以「SOL + USDC 双报价」给出，网关按账单资产（asset）选择结算币种。
+ *
+ * 定价锚设计（修复「SOL 隐含锚 $50」漏洞）：
+ * - USDC 为唯一权威报价（美元稳定币，锚定 $1.00）；
+ * - SOL 报价不再写死，而是由 USDC 价 ÷ 实时 SOL/USD 市场价 动态折算，
+ *   因此 SOL 支付始终等价于 USDC 报价，不会随 SOL 市价漂移而系统性多/少付；
+ * - SOL/USD 市场价默认 $86.36，可通过环境变量 SOL_USD_PRICE 覆盖（部署时按实时市价注入）。
  *
  * 设计要点：
  * - 纯数据 + 纯函数，无副作用，可完整单测；
@@ -22,9 +27,7 @@ export type SignalTier =
 export interface TierPrice {
   /** 档位展示名 */
   label: string;
-  /** SOL 报价 */
-  sol: number;
-  /** USDC 报价 */
+  /** USDC 报价（定价锚，权威） */
   usdc: number;
   /** 该档位提供的信号能力说明 */
   description: string;
@@ -32,32 +35,42 @@ export interface TierPrice {
   signalCount: number;
 }
 
-/** 全量档位定价表 */
+/** SOL/USD 默认市场价（美元）。部署时应通过 SOL_USD_PRICE 环境变量按实时市价覆盖。 */
+const DEFAULT_SOL_USD_PRICE = 86.36;
+
+/** 读取 SOL/USD 市场价：优先环境变量覆盖，否则回退默认值。 */
+export function getSolUsdPrice(): number {
+  const env = Number(process.env.SOL_USD_PRICE);
+  return Number.isFinite(env) && env > 0 ? env : DEFAULT_SOL_USD_PRICE;
+}
+
+/** 由 USDC 锚定价折算出的 SOL 报价（实时随 SOL/USD 市场价变化）。 */
+export function solAmountFor(price: TierPrice): number {
+  return price.usdc / getSolUsdPrice();
+}
+
+/** 全量档位定价表（USDC 为权威价，SOL 价由 solAmountFor 动态折算） */
 export const TIER_PRICING: Record<SignalTier, TierPrice> = {
   STANDARD_ALPHA: {
     label: 'Standard Alpha',
-    sol: 0.002,
     usdc: 0.1,
     description: '基础 Alpha 流：WHALE_ACCUMULATION + BREAKOUT_MOMENTUM 两条信号',
     signalCount: 1,
   },
   PREMIUM_ALPHA_SNIPER: {
     label: 'Premium Alpha Sniper',
-    sol: 0.005,
     usdc: 0.25,
     description: '高阶狙击流：含 SOL 与 0x.SOUL 双资产动量 + 推荐买入区间',
     signalCount: 2,
   },
   WHALE_ALPHA: {
     label: 'Whale Alpha',
-    sol: 0.02,
     usdc: 1.0,
     description: '巨鲸级流：深度智能资金流入追踪 + Hold Line 防御位实时测算',
     signalCount: 3,
   },
   INSTITUTIONAL: {
     label: 'Institutional',
-    sol: 0.1,
     usdc: 5.0,
     description: '机构级全量流：全策略集群推理 + 毕业曲线套利窗口 + 优先 Jito 打包',
     signalCount: 5,
@@ -87,7 +100,7 @@ export function resolveTier(requested?: string): {
   return { tier, price: TIER_PRICING[tier] };
 }
 
-/** 按资产返回该档位的报价（SOL 或 USDC） */
+/** 按资产返回该档位的报价（SOL 由 USDC 锚实时折算，USDC 为权威价） */
 export function priceForAsset(price: TierPrice, asset: PaymentAsset): number {
-  return asset === 'USDC' ? price.usdc : price.sol;
+  return asset === 'USDC' ? price.usdc : solAmountFor(price);
 }

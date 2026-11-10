@@ -1,11 +1,12 @@
 import { MarketMakerExecutionReport } from './types';
+import { MAX_WALLET_CAP_TOKENS } from '../../config/tokenomics';
 
 export interface HoldLineConfig {
   defensePriceSol: number;      // 目标守线价格 (SOL/Token)
   toleranceBps: number;         // 容忍偏离度 (例如 300 bps = 3%)
   defenseOrderBudgetSol: number; // 每次托盘最大预算 (<= 1.5 SOL 沙盒上限)
   minHoldLineDays: number;      // 需维持守线天数以捕获全部 Token-2022 手续费
-  maxInventoryTokens: number;   // 1% 单钱包持仓硬顶 (10,000,000 枚)
+  maxInventoryTokens: number;   // 1% 单钱包持仓硬顶（= 总供应 1%，单一事实源 config/tokenomics）
   trancheRatio: number;         // 单次阶梯托盘比例 (默认 0.25，分批托盘)
 }
 
@@ -14,7 +15,7 @@ export const DEFAULT_HOLD_LINE_CONFIG: HoldLineConfig = {
   toleranceBps: 200,            // 2%
   defenseOrderBudgetSol: 0.4,
   minHoldLineDays: 3,
-  maxInventoryTokens: 10_000_000,
+  maxInventoryTokens: MAX_WALLET_CAP_TOKENS,
   trancheRatio: 0.25,
 };
 

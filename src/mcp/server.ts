@@ -11,6 +11,8 @@
  */
 
 import { randomUUID } from 'crypto';
+import { TOTAL_SUPPLY_TOKENS, MAX_WALLET_CAP_TOKENS } from '../config/tokenomics';
+import { getGraduationTargetSol } from '../config/graduation';
 
 export interface McpToolDefinition {
   name: string;
@@ -267,7 +269,7 @@ export class GangSoulMcpServer {
               symbol: 'GMEME',
               creator: 'matrix-quant-whale.soul',
               marketCapSol: 38.0,
-              graduationProgressPct: 44.7, // 38 / 85 SOL
+              graduationProgressPct: 76.0, // 38 / 50 SOL (STANDARD 毕业目标)
               holders: 16,
               volume24hSol: 125.4,
               priceSol: 0.000000038,
@@ -285,11 +287,11 @@ export class GangSoulMcpServer {
           bondingCurveSupply: 800_000_000,
           currentPriceSol: 0.000000038,
           solReserve: 38.0,
-          graduationTargetSol: 85.0,
-          graduationProgressPct: 44.7,
+          graduationTargetSol: getGraduationTargetSol(),
+          graduationProgressPct: 76.0,
           isGraduated: false,
           raydiumAmmId: null,
-          maxWalletHoldingCap: 10_000_000, // 1%
+          maxWalletHoldingCap: MAX_WALLET_CAP_TOKENS, // 总供应 1%
           rule: 'Agent-only. Max 1.5 SOL per tx. Max 1% holding per agent passport.',
         };
       }
@@ -320,14 +322,14 @@ export class GangSoulMcpServer {
         const currentHoldings = (this.mockPortfolios.get(agentIndex) || []).find((p) => p.mint === args.mint);
         const currentBalance = currentHoldings ? currentHoldings.tokenBalance : 0;
         const postTradeBalance = isBuy ? currentBalance + estimatedTokens : currentBalance - estimatedTokens;
-        const postCapPct = (postTradeBalance / 1_000_000_000) * 100;
+        const postCapPct = (postTradeBalance / TOTAL_SUPPLY_TOKENS) * 100;
 
-        if (isBuy && postTradeBalance > 10_000_000) {
+        if (isBuy && postTradeBalance > MAX_WALLET_CAP_TOKENS) {
           return {
             error: 'CAP_EXCEEDED',
-            message: `[风控拦截] 交易后持仓 ${postTradeBalance} 枚超过 1% 法律级硬顶 (10,000,000 枚)`,
+            message: `[风控拦截] 交易后持仓 ${postTradeBalance} 枚超过 1% 法律级硬顶 (${MAX_WALLET_CAP_TOKENS} 枚)`,
             allowed: false,
-            currentCapPct: (currentBalance / 1_000_000_000) * 100,
+            currentCapPct: (currentBalance / TOTAL_SUPPLY_TOKENS) * 100,
           };
         }
 
@@ -399,11 +401,11 @@ export class GangSoulMcpServer {
           existing.averageBuyPriceSol = existing.costBasisSol / existing.tokenBalance;
           existing.unrealizedPnLSol = existing.currentValueSol - existing.costBasisSol;
           existing.unrealizedPnLPct = (existing.unrealizedPnLSol / existing.costBasisSol) * 100;
-          existing.capHoldingPct = (existing.tokenBalance / 1_000_000_000) * 100;
+          existing.capHoldingPct = (existing.tokenBalance / TOTAL_SUPPLY_TOKENS) * 100;
         } else {
           existing.tokenBalance = Math.max(0, existing.tokenBalance - preview.tokenAmount);
           existing.currentValueSol = existing.tokenBalance * existing.currentPriceSol;
-          existing.capHoldingPct = (existing.tokenBalance / 1_000_000_000) * 100;
+          existing.capHoldingPct = (existing.tokenBalance / TOTAL_SUPPLY_TOKENS) * 100;
         }
 
         this.mockPortfolios.set(preview.agentIndex, holdings);
