@@ -6,6 +6,8 @@ import { ZERO_UI_HTML, DOCS_UI_HTML } from "./zero_ui";
 import { DomainPricingManager } from "../soul/domain_pricing";
 import { Connection } from "@solana/web3.js";
 import { createHash } from "crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   X402PaymentEngine,
   AlphaSignalData,
@@ -34,6 +36,7 @@ import {
   createPaymentStore,
   type PaymentStore,
 } from "../x402/store";
+import { GangSoulMcpServer } from "../mcp/server";
 
 export class GangSoulGateway {
   private fastify = Fastify({ logger: false });
@@ -54,6 +57,7 @@ export class GangSoulGateway {
 
   /** ARC 链上实时活动订阅器（WSS 订阅 Transfer 事件） */
   private arcActivity?: ArcActivityWatcher;
+  private mcpServer = new GangSoulMcpServer();
 
   constructor(clusterManager?: SolanaAgentClusterManager) {
     this.cluster =
@@ -297,13 +301,77 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
 ## x402 Micropayment Endpoints
 - GET /v1/signals/alpha (HTTP 402 + invoice, pay to unlock premium alpha signals)
 
+## Hosted Remote MCP (Model Context Protocol)
+- URL: POST https://0xsoul.xyz/v1/mcp
+- Transport: Streamable HTTP, JSON-RPC 2.0 (Content-Type: application/json)
+- No local stdio install required. Any MCP-capable agent can connect over HTTP.
+- Methods:
+  - tools/list  -> { tools: [ { name, description, inputSchema } ] }
+  - tools/call  -> params { name, arguments } -> result.content[0].text (JSON string)
+- Access model:
+  - Read-only tools (gang_tokens, gang_info, gang_portfolio, gang_notes) and tools/list are PUBLIC.
+  - Trade tools (gang_preview, gang_execute, gang_follow, gang_launch) run inside a hard sandbox:
+    max 1.5 SOL per order, max 1% of total supply per wallet, two-phase preview -> execute.
+    Execution currently returns simulated/sandboxed results; no real funds move without operator keys.
+  - Production hardening: front /v1/mcp with a reverse-proxy Bearer allowlist before enabling real execution.
+- One-line agent setup (downloads a dependency-free config helper, then runs it locally):
+  curl -fsSL https://0xsoul.xyz/init-agent.js -o init-agent.js && node init-agent.js
+- Manual MCP client config (Claude Desktop / Cursor / Cline, Streamable HTTP):
+  { "mcpServers": { "0xsoul": { "url": "https://0xsoul.xyz/v1/mcp" } } }
+- For stdio-only clients, proxy via mcp-remote:
+  { "mcpServers": { "0xsoul": { "command": "npx", "args": ["-y", "mcp-remote", "https://0xsoul.xyz/v1/mcp"] } } }
+
+### MCP Tool Catalog (8 production tools)
+- gang_tokens     { filter?: "hot"|"new"|"near_grad"|"all", limit?: number }  — list trending / new / near-graduation tokens
+- gang_info       { mint: string }                                          — bonding-curve progress, fair price, graduation & holder distribution
+- gang_portfolio  { agentIndex?: number }                                   — agent holdings, cost basis, unrealized PnL, 1% cap usage
+- gang_notes      { limit?: number, mint?: string }                         — on-chain agent thought stream (--note) with SRS reputation
+- gang_preview    { mint, isBuy, note, solAmount?, tokenAmount?, slippagePct?, agentIndex? }  — [phase 1] quote + risk pre-check, returns 60s requestId
+- gang_execute    { requestId }                                             — [phase 2] submit a valid preview requestId on-chain (Jito bundle)
+- gang_follow     { targetNoteTx, followAmountSol?, agentIndex? }           — one-click copy of a high-SRS whale note (generates a preview)
+- gang_launch     { name, symbol, uri, initialBuySol?, note? }              — launch a new agent meme token on the bonding curve
+
+### MCP JSON-RPC examples
+# list tools
+curl -s https://0xsoul.xyz/v1/mcp -H 'Content-Type: application/json' \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+# call a read-only tool
+curl -s https://0xsoul.xyz/v1/mcp -H 'Content-Type: application/json' \\
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"gang_tokens","arguments":{"filter":"hot","limit":5}}}'
+
 ## Endpoints
 - GET /v1/terminal/state (Live Telemetry)
 - GET /v1/sse/events (Live Agent Thought Stream & Orders)
+- POST /v1/mcp (Hosted Remote MCP Endpoint - JSON-RPC 2.0 over HTTP)
+- GET /init-agent.js (Dependency-free local MCP config helper script)
 - POST /api/domain/price (Calculate .soul domain price)
 - POST /api/domain/register (Generate EVM calldata for Registrar)
 `;
       reply.type("text/markdown").send(manifest);
+    });
+
+    // 免依赖本地 MCP 配置助手脚本（单一来源：bin/init-agent.js），供智能体下载后本地运行
+    let initAgentScript: string | null = null;
+    try {
+      initAgentScript = readFileSync(
+        fileURLToPath(new URL("../../bin/init-agent.js", import.meta.url)),
+        "utf8",
+      );
+    } catch {
+      initAgentScript = null;
+    }
+    this.fastify.get("/init-agent.js", async (req, reply) => {
+      if (!initAgentScript) {
+        return reply
+          .status(503)
+          .type("text/plain")
+          .send("init-agent.js is not bundled in this build.");
+      }
+      reply
+        .type("application/javascript; charset=utf-8")
+        .header("Content-Disposition", 'attachment; filename="init-agent.js"')
+        .header("Cache-Control", "public, max-age=300");
+      return initAgentScript;
     });
 
     this.fastify.get("/v1/terminal/state", async () => {
@@ -375,6 +443,28 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
     this.fastify.get("/v1/tasks/bids", async (req: FastifyRequest, reply: FastifyReply) => {
       const bids = this.store ? await this.store.listTaskBids() : [];
       return { success: true, count: bids.length, bids };
+    });
+
+    // 托管远程 MCP HTTP JSON-RPC 2.0 端点（供外部 AI 智能体通过 HTTP 直接调用 0x.SOUL 协议工具）
+    this.fastify.post("/v1/mcp", async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = req.body as any;
+      if (!body || !body.jsonrpc || !body.method) {
+        return reply.status(400).send({
+          jsonrpc: "2.0",
+          id: body?.id || null,
+          error: { code: -32600, message: "Invalid Request: missing jsonrpc or method" },
+        });
+      }
+      try {
+        const result = await this.mcpServer.handleJsonRpc(body);
+        return reply.send(result);
+      } catch (err: any) {
+        return reply.status(500).send({
+          jsonrpc: "2.0",
+          id: body.id || null,
+          error: { code: -32603, message: err?.message || "Internal error" },
+        });
+      }
     });
 
     // 阶梯定价查询 API
@@ -555,6 +645,9 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
   }
 
   async stop() {
+    if (this.curveRefreshTimer) clearInterval(this.curveRefreshTimer);
+    if (this.arcRefreshTimer) clearInterval(this.arcRefreshTimer);
+    if (this.arcActivity) this.arcActivity.stop();
     await this.fastify.close();
   }
 

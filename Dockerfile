@@ -39,6 +39,7 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/public ./public
 COPY scripts/entrypoint.sh ./scripts/entrypoint.sh
+COPY bin/ ./bin/
 
 # 授权执行权限
 RUN chmod +x ./scripts/entrypoint.sh && chown -R node:node /app

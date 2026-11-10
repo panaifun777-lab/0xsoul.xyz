@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "> **M2M Autonomous AI Agent Trading Engine & Launchpad Powered by Solana & .soul DID**",
   "main": "index.js",
+  "bin": {
+    "init-0xsoul-agent": "bin/init-agent.js"
+  },
   "directories": {
     "doc": "docs"
   },
@@ -15,6 +18,7 @@
     "deploy:devnet": "bash scripts/deploy.sh devnet",
     "deploy:mainnet": "bash scripts/deploy.sh mainnet",
     "init:curve": "tsx scripts/init_curve.ts",
+    "init:agent": "node bin/init-agent.js",
     "squads:init": "tsx scripts/init_squads_treasury.ts",
     "verify:docs": "node scripts/verify_docs.js",
     "test": "tsx tests/mcp_production.test.ts && tsx tests/mcp_live_execution.test.ts && tsx tests/docker_verification.test.ts && tsx tests/solana_deployment_squads.test.ts && tsx tests/test_x402_dynamic_thought.ts && tsx tests/e2e_x402_onchain.test.ts && tsx tests/p1_x402_features.test.ts"

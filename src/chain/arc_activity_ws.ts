@@ -147,7 +147,14 @@ export class ArcActivityWatcher {
   stop(): void {
     this.stopped = true;
     try {
-      this.provider?.destroy();
+      if (this.provider) {
+        // @ts-ignore
+        if (this.provider.websocket) {
+          // @ts-ignore
+          this.provider.websocket.on('error', () => {});
+        }
+        this.provider.destroy();
+      }
     } catch {
       /* noop */
     }

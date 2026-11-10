@@ -539,7 +539,7 @@ export class GangSoulMcpServer {
     });
   }
 
-  private async handleJsonRpc(req: any): Promise<any> {
+  public async handleJsonRpc(req: any): Promise<any> {
     const { id, method, params } = req;
     if (method === 'tools/list') {
       return {
