@@ -6,11 +6,9 @@
  *
  * 设计要点：
  * - 单一事实源对齐 `launchpad_ix.ts` 的 `deriveBondingCurvePda(["bonding_curve", mint])`；
- * - 账户布局采用 pump.fun 兼容的标准（gang_launchpad 对齐该标准）：
- *     virtual_token_reserves u64(0) | virtual_sol_reserves u64(8) |
- *     real_token_reserves u64(16) | real_sol_reserves u64(24) |
- *     token_total_supply u64(32) | complete bool(40+)
- *   若实际部署程序的字段顺序/偏移不同，只需在此函数对齐，调用方无感；
+ * - 账户布局严格对齐 `programs/gang_launchpad/src/state.rs :: BondingCurveState`
+ *   （Borsh 全定长，详见 `deserializeBondingCurve` 的偏移注释）；
+ *   若实际部署程序的字段顺序/偏移不同，只需在该函数对齐，调用方无感；
  * - 任何失败（程序为占位名 / 账户不存在 / RPC 超时 / 反序列化异常）都安全回退到
  *   种子值并标注 source:'seed'，绝不抛错、绝不阻塞请求；
  * - 毕业目标（graduationTargetSol）取本系统配置（getGraduationTargetSol，可由
@@ -65,16 +63,36 @@ function readU64LE(buf: Buffer, offset: number): bigint {
 }
 
 /**
- * 反序列化 bonding_curve 账户（pump.fun 兼容布局）。
- * 返回真实 SOL 储备（lamports）与是否毕业。
+ * 反序列化 bonding_curve 账户，严格对齐
+ * `programs/gang_launchpad/src/state.rs :: BondingCurveState`（Borsh，全定长字段）：
+ *   bump u8            @0
+ *   mint              32B @1
+ *   creator           32B @33
+ *   pool_token_balance u64 @65
+ *   pool_sol_balance  u64 @73
+ *   virtual_sol_reserves u64 @81
+ *   virtual_token_reserves u64 @89
+ *   target_sol_graduation u64 @97
+ *   total_raised      u64 @105   ← 真实已筹 SOL（lamports）
+ *   is_graduated      bool @113
+ *   launch_mode       u8  @114
+ *   created_at        i64 @115
+ *   fee_receiver      32B @123
+ * 返回：真实已筹 SOL（折算 SOL）、链上毕业目标 SOL、是否已毕业。
  */
 export function deserializeBondingCurve(data: Buffer): {
-  realSolReserves: bigint;
-  complete: boolean;
+  totalRaisedSol: number;
+  targetSol: number;
+  isGraduated: boolean;
 } {
-  const realSolReserves = readU64LE(data, 24); // real_sol_reserves @24
-  const complete = data.length > 40 && data[40] === 1;
-  return { realSolReserves, complete };
+  const totalRaisedLamports = readU64LE(data, 105); // total_raised @105
+  const targetLamports = readU64LE(data, 97); // target_sol_graduation @97
+  const isGraduated = data.length > 113 && data[113] === 1;
+  return {
+    totalRaisedSol: Number(totalRaisedLamports) / 1e9,
+    targetSol: Number(targetLamports) / 1e9,
+    isGraduated,
+  };
 }
 
 /**
@@ -122,9 +140,11 @@ export async function readBondingCurveOnChain(opts: {
     const buf = Buffer.isBuffer(account.data)
       ? account.data
       : Buffer.from(account.data as Uint8Array);
-    const { realSolReserves, complete } = deserializeBondingCurve(buf);
-    const raisedSol = Number(realSolReserves) / 1e9;
-    const target = graduationTargetSol > 0 ? graduationTargetSol : SEED_TARGET_SOL;
+    const { totalRaisedSol, targetSol, isGraduated } = deserializeBondingCurve(buf);
+    const raisedSol = totalRaisedSol;
+    // 优先用链上 target_sol_graduation；未写入（=0）时回退本系统配置/种子
+    const target =
+      targetSol > 0 ? targetSol : graduationTargetSol > 0 ? graduationTargetSol : SEED_TARGET_SOL;
     const pct = Math.min(100, Number(((raisedSol / target) * 100).toFixed(2)));
 
     return {
@@ -132,7 +152,7 @@ export async function readBondingCurveOnChain(opts: {
       totalRaisedSol: Number(raisedSol.toFixed(4)),
       graduationTargetSol: target,
       bondingCurveProgressPercent: pct,
-      isGraduated: complete,
+      isGraduated,
       onchainRealSolReserves: raisedSol,
     };
   } catch (e: any) {
