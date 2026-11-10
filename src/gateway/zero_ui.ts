@@ -405,7 +405,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
           <span data-en="📈 50 SOL Bonding Curve Graduation Engine">📈 50 SOL 联合曲线毕业引擎</span>
           <span style="font-size: 0.78rem; color: var(--accent-green);" data-en="Target: 50 SOL ➔ Raydium CPMM">目标: 50 SOL ➔ Raydium CPMM</span>
         </div>
-        <div style="font-size:0.7rem;color:#f0b429;margin:0 0 0.5rem" data-en="⚠ Demo data — graduation progress is a seeded value, not live on-chain.">⚠ 演示数据 — 毕业进度为种子值，非链上实时。</div>
+        <div id="grad-demo-note" style="font-size:0.7rem;color:#f0b429;margin:0 0 0.5rem" data-en="⚠ Demo data — graduation progress is a seeded value, not live on-chain.">⚠ 演示数据 — 毕业进度为种子值，非链上实时。</div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
           <span id="token-title-el" style="font-weight: bold; font-size: 1.05rem; color: var(--accent-cyan);" data-en="$0x.SOUL / $GSOUL">$0x.SOUL / $GSOUL</span>
           <span class="badge" data-en="Virtual AMM x*y=k">虚拟 AMM x*y=k</span>
@@ -746,6 +746,10 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
           animateValue(document.getElementById('num-agents'), a.activeNodes, 0);
           animateValue(document.getElementById('num-profit'), a.gridQuantProfitSol || 0.4182, 4);
         }
+        // 数据来源：链上真实读取则隐藏演示标签，回退种子值则显示
+        const grad = data && data.graduation;
+        const demoNote = document.getElementById('grad-demo-note');
+        if (demoNote) demoNote.style.display = (grad && grad.dataSource === 'onchain') ? 'none' : '';
       } catch (err) {}
     }
     // 初始从 0 滚到默认值，即使后端慢/失败页面也"活"着

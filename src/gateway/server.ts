@@ -17,6 +17,12 @@ import {
 } from "../x402/onchain_verifier";
 import { resolveTier, priceForAsset, solAmountFor, TIER_PRICING } from "../x402/pricing";
 import { MAX_WALLET_CAP_TOKENS } from "../config/tokenomics";
+import { getGraduationTargetSol } from "../config/graduation";
+import {
+  readBondingCurveOnChain,
+  initialSeedState,
+  type BondingCurveState,
+} from "../chain/bonding_curve_reader";
 import { buildAttestation } from "../x402/attestation";
 import {
   createPaymentStore,
@@ -29,6 +35,12 @@ export class GangSoulGateway {
   private engine: X402PaymentEngine;
   private store?: PaymentStore;
 
+  /** 联合曲线链上状态缓存（毕业进度 / 已筹 SOL），含来源标记 */
+  private curveState: BondingCurveState = initialSeedState();
+  private curveExpiresAt = 0;
+  private solConnection: Connection | null = null;
+  private curveRefreshTimer?: ReturnType<typeof setInterval>;
+
   constructor(clusterManager?: SolanaAgentClusterManager) {
     this.cluster =
       clusterManager ||
@@ -37,6 +49,61 @@ export class GangSoulGateway {
           "wool vintage lock whisper razor diesel divide plastic unaware shield shock brass abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
       );
     this.engine = this.buildEngine();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 联合曲线链上状态（毕业进度 / 已筹 SOL）                               */
+  /* ------------------------------------------------------------------ */
+
+  /** 懒加载 Solana Connection（优先 Helius 主网 RPC，由环境变量注入） */
+  private getSolConnection(): Connection | null {
+    if (this.solConnection) return this.solConnection;
+    const isMainnet = process.env.SOLANA_NETWORK === "mainnet";
+    const rpc = isMainnet
+      ? process.env.SOLANA_MAINNET_RPC
+      : process.env.SOLANA_DEVNET_RPC;
+    if (!rpc) return null;
+    try {
+      this.solConnection = new Connection(rpc, "confirmed");
+    } catch {
+      return null;
+    }
+    return this.solConnection;
+  }
+
+  /**
+   * 读取并缓存联合曲线链上状态。
+   * 任何失败（占位程序 / 账户不存在 / RPC 超时 / 反序列化异常）都回退种子值，
+   * 绝不抛错、绝不阻塞请求。链上成功缓存 30s，回退 5s 后重试。
+   */
+  private async refreshCurveState(): Promise<void> {
+    const now = Date.now();
+    if (this.curveExpiresAt && now < this.curveExpiresAt) return;
+
+    const conn = this.getSolConnection();
+    if (!conn) {
+      this.curveState = initialSeedState();
+      this.curveExpiresAt = now + 30000;
+      return;
+    }
+
+    try {
+      const st = await readBondingCurveOnChain({
+        programId:
+          process.env.GANG_PROGRAM_ID ||
+          "GangLaunchpad111111111111111111111111111111",
+        mint:
+          process.env.TARGET_MINT ||
+          "GgZcyZ8A2wWxULFPfjJ6deUMqmoN1QDpLnZVGkBkiVcL",
+        connection: conn,
+        graduationTargetSol: getGraduationTargetSol(),
+      });
+      this.curveState = st;
+      this.curveExpiresAt = now + (st.source === "seed" ? 5000 : 30000);
+    } catch {
+      this.curveState = initialSeedState();
+      this.curveExpiresAt = now + 5000;
+    }
   }
 
   /**
@@ -206,7 +273,27 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
       reply.type("text/markdown").send(manifest);
     });
 
-    this.fastify.get("/v1/terminal/state", async () => terminalPayload);
+    this.fastify.get("/v1/terminal/state", async () => {
+      const cs = this.curveState;
+      return {
+        ...terminalPayload,
+        token: {
+          ...terminalPayload.token,
+          liquidityDepth: {
+            ...terminalPayload.token.liquidityDepth,
+            totalRaisedSol: cs.totalRaisedSol,
+            graduationTargetSol: cs.graduationTargetSol,
+            bondingCurveProgressPercent: cs.bondingCurveProgressPercent,
+          },
+        },
+        graduation: {
+          dataSource: cs.source,
+          isGraduated: cs.isGraduated,
+          fallbackReason: cs.fallbackReason,
+        },
+        serverTime: Date.now(),
+      };
+    });
 
     // S2S 双轨定价：任务竞标与托管端点 (Task Bidding & Escrow)
     this.fastify.post("/v1/tasks/bids", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -387,6 +474,15 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
     await this.fastify.listen({ port: listenPort, host: listenHost });
     console.log(
       `🌐 [0x.SOUL GATEWAY] 服务已成功监听在: http://${listenHost}:${listenPort}`,
+    );
+
+    // 启动联合曲线链上状态读取（毕业进度 / 已筹 SOL），并每 30s 刷新缓存。
+    // 读取失败（占位程序 / 未上链）会自动回退种子值，不影响服务。
+    void this.refreshCurveState();
+    if (this.curveRefreshTimer) clearInterval(this.curveRefreshTimer);
+    this.curveRefreshTimer = setInterval(
+      () => void this.refreshCurveState(),
+      30000,
     );
   }
 
