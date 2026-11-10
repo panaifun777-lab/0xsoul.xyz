@@ -475,12 +475,12 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
             <span style="color: var(--accent-gold); font-weight: bold;">1% (10,730,000)</span>
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="color: #64748b;" data-en="ARC On-chain Supply:">ARC 链上总量(实时):</span>
-            <span class="glow-val" style="color: var(--accent-green); font-weight: bold;">
-              <span class="num" id="num-arc-supply">0</span>
-              <span data-en=" $0x.SOUL"> $0x.SOUL</span>
-              <span id="arc-supply-badge" class="badge" style="font-size:0.62rem;padding:1px 7px;background:rgba(240,180,41,0.12);color:#f0b429;border:1px solid rgba(240,180,41,0.4)" data-en="Demo">演示</span>
-            </span>
+            <span style="color: #64748b;" data-en="ARC Total Supply:">ARC 总供应:</span>
+            <span class="glow-val" style="color: var(--accent-gold); font-weight: bold;">1,073,000,000 <span data-en="$0x.SOUL">$0x.SOUL</span></span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; color: #64748b; margin-top: 2px;">
+            <span data-en="On-chain minted (real-time): ">链上已铸造(实时): <span class="num" id="num-arc-supply">0</span> <span data-en="$0x.SOUL">$0x.SOUL</span></span>
+            <span id="arc-supply-badge" class="badge" style="font-size:0.62rem;padding:1px 7px;background:rgba(240,180,41,0.12);color:#f0b429;border:1px solid rgba(240,180,41,0.4)" data-en="Demo">演示</span>
           </div>
         </div>
       </div>
