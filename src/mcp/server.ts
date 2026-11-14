@@ -13,6 +13,14 @@
 import { randomUUID } from 'crypto';
 import { TOTAL_SUPPLY_TOKENS, MAX_WALLET_CAP_TOKENS } from '../config/tokenomics';
 import { getGraduationTargetSol } from '../config/graduation';
+import { RemoteMcpFederation, RemoteMcpUpstream } from './remote_federation';
+import {
+  ConfirmationService,
+  OwnerEd25519Approver,
+  AcceptAllApprover,
+  type Executor,
+  type ConfirmAction,
+} from './confirmation';
 
 export interface McpToolDefinition {
   name: string;
@@ -185,6 +193,31 @@ export const GANG_SOUL_PRODUCTION_MCP_TOOLS: McpToolDefinition[] = [
       required: ['name', 'symbol', 'uri'],
     },
   },
+  {
+    name: 'gang_approve',
+    description:
+      '【手机确认锁】对一笔待确认意图（PENDING_CONFIRMATION）用确认私钥签名批准。签名须覆盖 challenge（预览哈希|requestId|过期时刻）。强确认档需 secondFactor 二次复核。超时或拒绝=不成交。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string', description: 'gang_execute 返回的待确认 requestId' },
+        signature: { type: 'string', description: '对 challenge 的 ed25519 签名（base64）' },
+        secondFactor: { type: 'string', description: '强确认档的二次复核凭证（如生物识别令牌）' },
+      },
+      required: ['requestId', 'signature'],
+    },
+  },
+  {
+    name: 'gang_confirm_status',
+    description: '查询确认锁待确认队列状态：不传 requestId 返回全部待确认；传入则返回该意图的状态 / 档位 / 过期时刻',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string', description: '可选，查询单个意图' },
+      },
+      required: [],
+    },
+  },
 ];
 
 /**
@@ -192,6 +225,8 @@ export const GANG_SOUL_PRODUCTION_MCP_TOOLS: McpToolDefinition[] = [
  */
 export class GangSoulMcpServer {
   private gatewayBaseUrl: string;
+  private federation: RemoteMcpFederation = new RemoteMcpFederation([]);
+  private confirmation: ConfirmationService;
   private pendingPreviews: Map<string, TradePreviewResponse> = new Map();
   private mockPortfolios: Map<number, AgentPortfolioItem[]> = new Map();
   private mockNotes: Array<{
@@ -208,6 +243,129 @@ export class GangSoulMcpServer {
   constructor(gatewayBaseUrl = 'http://127.0.0.1:3000') {
     this.gatewayBaseUrl = gatewayBaseUrl;
     this.initMockNotesAndPortfolios();
+    this.initFederation();
+    this.confirmation = this.buildConfirmation();
+  }
+
+  /**
+   * 构建确认锁服务。审批走可插拔 Approver：
+   *  - 配置了 CONFIRM_OWNER_PUBKEY（owner 确认公钥 base64）→ OwnerEd25519Approver（v1 正式路径）；
+   *  - CONFIRM_TEST_MODE=1 → AcceptAllApprover（仅测试/演示，生产禁止）；
+   *  - 都不配 → approver 为 null，需确认的意图 fail-closed 拒绝（PDF：沉默=拒绝，不自动放行）。
+   */
+  private buildConfirmation(): ConfirmationService {
+    const svc = new ConfirmationService();
+    const pub = process.env.CONFIRM_OWNER_PUBKEY;
+    if (pub) {
+      try {
+        svc.setApprover(new OwnerEd25519Approver(pub));
+      } catch (e: any) {
+        console.warn('[confirmation] CONFIRM_OWNER_PUBKEY 无效，确认面 fail-closed:', e?.message);
+      }
+    } else if (process.env.CONFIRM_TEST_MODE === '1') {
+      console.warn('[confirmation] CONFIRM_TEST_MODE=1：AcceptAllApprover，生产禁止！');
+      svc.setApprover(new AcceptAllApprover());
+    } else {
+      console.warn('[confirmation] 未配置 CONFIRM_OWNER_PUBKEY：需确认的意图将 fail-closed 拒绝。');
+    }
+    return svc;
+  }
+
+  /** 暴露确认锁服务（网关 kill switch 联动用）。 */
+  get confirmationService(): ConfirmationService {
+    return this.confirmation;
+  }
+
+  /**
+   * 执行回调（v1 为 mock 执行：更新模拟持仓并生成模拟 txid）。
+   * 真实 live_executor 后续以同一 Executor 接口接入，确认锁逻辑无需改动。
+   */
+  private getExecutor(): Executor {
+    return (preview: TradePreviewResponse) => {
+      const startTime = Date.now();
+      let holdings = this.mockPortfolios.get(preview.agentIndex) || [];
+      let existing = holdings.find((h) => h.mint === preview.mint);
+      if (!existing) {
+        existing = {
+          mint: preview.mint,
+          symbol: 'GMEME',
+          tokenBalance: 0,
+          averageBuyPriceSol: preview.estimatedPriceSol,
+          currentPriceSol: preview.estimatedPriceSol,
+          costBasisSol: 0,
+          currentValueSol: 0,
+          unrealizedPnLSol: 0,
+          unrealizedPnLPct: 0,
+          capHoldingPct: 0,
+        };
+        holdings.push(existing);
+      }
+      if (preview.isBuy) {
+        existing.tokenBalance += preview.tokenAmount;
+        existing.costBasisSol += preview.solAmount;
+        existing.currentPriceSol = preview.estimatedPriceSol;
+        existing.currentValueSol = existing.tokenBalance * existing.currentPriceSol;
+        existing.averageBuyPriceSol = existing.costBasisSol / existing.tokenBalance;
+        existing.unrealizedPnLSol = existing.currentValueSol - existing.costBasisSol;
+        existing.unrealizedPnLPct = (existing.unrealizedPnLSol / existing.costBasisSol) * 100;
+        existing.capHoldingPct = (existing.tokenBalance / TOTAL_SUPPLY_TOKENS) * 100;
+      } else {
+        existing.tokenBalance = Math.max(0, existing.tokenBalance - preview.tokenAmount);
+        existing.currentValueSol = existing.tokenBalance * existing.currentPriceSol;
+        existing.capHoldingPct = (existing.tokenBalance / TOTAL_SUPPLY_TOKENS) * 100;
+      }
+      this.mockPortfolios.set(preview.agentIndex, holdings);
+      const result: TradeExecutionResult = {
+        txSignature: `5SolSig${Date.now()}LiveExecJitoBundledHash999999999`,
+        status: 'CONFIRMED',
+        mint: preview.mint,
+        isBuy: preview.isBuy,
+        solAmount: preview.solAmount,
+        tokenAmount: preview.tokenAmount,
+        latencyMs: Date.now() - startTime + 42,
+        note: preview.note,
+        timestamp: Date.now(),
+      };
+      return { status: 'CONFIRMED', result, txid: result.txSignature };
+    };
+  }
+
+  /**
+   * Config-gated federation of upstream remote MCP servers (e.g. MoonLauncher).
+   * Disabled by default; enable with FEDERATE_REMOTE_MCP=1. REMOTE_MCP_SERVERS can
+   * override the upstream list (JSON array of {id,url,prefix}); otherwise the
+   * default MoonLauncher upstream (prefix `ml_`) is used. Failures are non-fatal:
+   * the gateway keeps serving its own local tools.
+   */
+  private initFederation(): void {
+    let upstreams: RemoteMcpUpstream[] = [];
+    if (process.env.FEDERATE_REMOTE_MCP === '1' || process.env.FEDERATE_REMOTE_MCP === 'true') {
+      const raw = process.env.REMOTE_MCP_SERVERS;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) upstreams = parsed as RemoteMcpUpstream[];
+        } catch {
+          console.warn('[federation] REMOTE_MCP_SERVERS is not valid JSON; using default');
+        }
+      }
+      if (upstreams.length === 0) {
+        upstreams = [
+          { id: 'moonlauncher', url: 'https://moonlauncher.app/mcp', prefix: 'ml_' },
+        ];
+      }
+    }
+    this.federation = new RemoteMcpFederation(upstreams);
+    if (this.federation.isEnabled()) {
+      this.refreshUpstreams().catch((e: any) =>
+        console.warn(`[federation] initial refresh failed: ${e?.message ?? e}`),
+      );
+    }
+  }
+
+  /** Manually (re)fetch upstream tool/prompt catalogs. Safe to call anytime. */
+  public async refreshUpstreams(): Promise<void> {
+    await this.federation.refresh();
   }
 
   private initMockNotesAndPortfolios() {
@@ -251,10 +409,16 @@ export class GangSoulMcpServer {
   }
 
   public listTools(): McpToolDefinition[] {
-    return GANG_SOUL_PRODUCTION_MCP_TOOLS;
+    const local = GANG_SOUL_PRODUCTION_MCP_TOOLS;
+    const upstream = this.federation.getTools();
+    return [...local, ...upstream] as McpToolDefinition[];
   }
 
   public async executeTool(name: string, args: any): Promise<any> {
+    // Federated upstream tool (namespaced with the upstream prefix, e.g. ml_start_launch).
+    if (this.federation.isEnabled() && this.federation.prefixOf(name)) {
+      return await this.federation.callTool(name, args);
+    }
     switch (name) {
       case 'gang_tokens': {
         const filter = args.filter || 'hot';
@@ -354,15 +518,22 @@ export class GangSoulMcpServer {
 
         this.pendingPreviews.set(requestId, preview);
 
+        // 确认锁：计算预览哈希 + 三档分级，让调用方知道是否需要手机确认
+        const previewHash = this.confirmation.computePreviewHash(preview);
+        const tier = this.confirmation.classify(preview, preview.isBuy ? 'buy' : 'sell');
+
         return {
           status: 'PREVIEW_GENERATED',
-          instruction: '请核对以下参数并调用 gang_execute 完成两阶段上链。',
+          instruction: '请核对以下参数；如需确认将返回 challenge，调用 gang_approve 带签名批准。',
           preview,
+          previewHash,
+          tier,
+          confirmRequired: tier !== 'EXEMPT',
         };
       }
 
       case 'gang_execute': {
-        // 第二阶段：校验 requestId 并执行
+        // 第二阶段：提交执行意图，由确认锁状态机决定直行或进待确认队列
         const preview = this.pendingPreviews.get(args.requestId);
         if (!preview) {
           throw new Error(`[执行失败] 无效或未找到 requestId: ${args.requestId}`);
@@ -372,63 +543,60 @@ export class GangSoulMcpServer {
           throw new Error(`[执行失败] 该报价已过期 (TTL 60s)，请重新调用 gang_preview 获取新报价`);
         }
 
-        // 模拟执行与延迟遥测
-        const startTime = Date.now();
-        // 更新模拟持仓
-        let holdings = this.mockPortfolios.get(preview.agentIndex) || [];
-        let existing = holdings.find((h) => h.mint === preview.mint);
-        if (!existing) {
-          existing = {
-            mint: preview.mint,
-            symbol: 'GMEME',
-            tokenBalance: 0,
-            averageBuyPriceSol: preview.estimatedPriceSol,
-            currentPriceSol: preview.estimatedPriceSol,
-            costBasisSol: 0,
-            currentValueSol: 0,
-            unrealizedPnLSol: 0,
-            unrealizedPnLPct: 0,
-            capHoldingPct: 0,
+        const action: ConfirmAction = preview.isBuy ? 'buy' : 'sell';
+        const submit = await this.confirmation.submit(preview, action, this.getExecutor());
+
+        if (submit.status === 'REJECTED') {
+          this.pendingPreviews.delete(args.requestId);
+          return { status: 'REJECTED', allowed: false, reason: submit.reason };
+        }
+        if (submit.status === 'EXEMPT') {
+          // 免确认档：已直接执行
+          this.pendingPreviews.delete(args.requestId);
+          return {
+            status: 'EXECUTION_CONFIRMED',
+            result: submit.result,
+            jitoBundleId: `jito_bundle_${Math.random().toString(36).substring(2, 10)}`,
           };
-          holdings.push(existing);
         }
-
-        if (preview.isBuy) {
-          existing.tokenBalance += preview.tokenAmount;
-          existing.costBasisSol += preview.solAmount;
-          existing.currentPriceSol = preview.estimatedPriceSol;
-          existing.currentValueSol = existing.tokenBalance * existing.currentPriceSol;
-          existing.averageBuyPriceSol = existing.costBasisSol / existing.tokenBalance;
-          existing.unrealizedPnLSol = existing.currentValueSol - existing.costBasisSol;
-          existing.unrealizedPnLPct = (existing.unrealizedPnLSol / existing.costBasisSol) * 100;
-          existing.capHoldingPct = (existing.tokenBalance / TOTAL_SUPPLY_TOKENS) * 100;
-        } else {
-          existing.tokenBalance = Math.max(0, existing.tokenBalance - preview.tokenAmount);
-          existing.currentValueSol = existing.tokenBalance * existing.currentPriceSol;
-          existing.capHoldingPct = (existing.tokenBalance / TOTAL_SUPPLY_TOKENS) * 100;
-        }
-
-        this.mockPortfolios.set(preview.agentIndex, holdings);
-        this.pendingPreviews.delete(args.requestId);
-
-        const latencyMs = Date.now() - startTime + 42; // 模拟广播耗时 42ms
-        const result: TradeExecutionResult = {
-          txSignature: `5SolSig${Date.now()}LiveExecJitoBundledHash999999999`,
-          status: 'CONFIRMED',
-          mint: preview.mint,
-          isBuy: preview.isBuy,
-          solAmount: preview.solAmount,
-          tokenAmount: preview.tokenAmount,
-          latencyMs,
-          note: preview.note,
-          timestamp: Date.now(),
+        // PENDING：需手机确认
+        return {
+          status: 'PENDING_CONFIRMATION',
+          requestId: preview.requestId,
+          tier: submit.intent?.tier,
+          previewHash: submit.intent?.previewHash,
+          challenge: submit.challenge,
+          expiresAt: submit.intent?.expiresAt,
+          instruction:
+            '本笔需手机确认：用确认私钥对 challenge（预览哈希|requestId|过期时刻）签名，调用 gang_approve(requestId, signature)。超时或拒绝=不成交。',
         };
+      }
 
+      case 'gang_approve': {
+        const { requestId, signature, secondFactor } = args;
+        if (!requestId || !signature) {
+          throw new Error('gang_approve 需要 requestId 与 signature');
+        }
+        const res = await this.confirmation.approve(requestId, signature, this.getExecutor(), { secondFactor });
+        if (!res.ok) {
+          return { status: res.status, allowed: false, reason: res.reason };
+        }
         return {
           status: 'EXECUTION_CONFIRMED',
-          result,
+          result: res.result,
           jitoBundleId: `jito_bundle_${Math.random().toString(36).substring(2, 10)}`,
         };
+      }
+
+      case 'gang_confirm_status': {
+        const id = args.requestId;
+        if (!id) {
+          return { pending: this.confirmation.listPending() };
+        }
+        const intent = this.confirmation.getPending(id);
+        return intent
+          ? { requestId: id, status: intent.status, tier: intent.tier, expiresAt: intent.expiresAt }
+          : { requestId: id, status: 'UNKNOWN' };
       }
 
       case 'gang_portfolio': {
@@ -549,15 +717,41 @@ export class GangSoulMcpServer {
       };
     }
 
+    if (method === 'prompts/list') {
+      if (!this.federation.isEnabled()) {
+        return { jsonrpc: '2.0', id, result: { prompts: [] } };
+      }
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: { prompts: this.federation.getPrompts() },
+      };
+    }
+
+    if (method === 'prompts/get') {
+      if (!this.federation.isEnabled()) {
+        return { jsonrpc: '2.0', id, error: { code: -32601, message: 'No prompts available' } };
+      }
+      try {
+        const { name, arguments: args } = params;
+        const result = await this.federation.getPrompt(name, args);
+        return { jsonrpc: '2.0', id, result };
+      } catch (err: any) {
+        return { jsonrpc: '2.0', id, error: { code: -32603, message: err.message } };
+      }
+    }
+
     if (method === 'tools/call') {
       try {
         const { name, arguments: args } = params;
         const result = await this.executeTool(name, args);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] },
-        };
+        // Upstream (federated) tools already return { content: [...] }; pass through
+        // to avoid double-wrapping. Local tools return plain objects -> wrap as text.
+        const finalResult =
+          result && Array.isArray((result as any).content)
+            ? result
+            : { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        return { jsonrpc: '2.0', id, result: finalResult };
       } catch (err: any) {
         return {
           jsonrpc: '2.0',

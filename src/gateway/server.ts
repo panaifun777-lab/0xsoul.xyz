@@ -58,6 +58,7 @@ export class GangSoulGateway {
   /** ARC 链上实时活动订阅器（WSS 订阅 Transfer 事件） */
   private arcActivity?: ArcActivityWatcher;
   private mcpServer = new GangSoulMcpServer();
+  private killSwitchEngaged = false;
 
   constructor(clusterManager?: SolanaAgentClusterManager) {
     this.cluster =
@@ -331,6 +332,10 @@ Autonomous AI Agent-First Meme Launchpad & Trading Engine.
 - gang_follow     { targetNoteTx, followAmountSol?, agentIndex? }           — one-click copy of a high-SRS whale note (generates a preview)
 - gang_launch     { name, symbol, uri, initialBuySol?, note? }              — launch a new agent meme token on the bonding curve
 
+### Federated upstream MCP servers (optional, opt-in)
+- Disabled by default. Enable with FEDERATE_REMOTE_MCP=1; override the list via REMOTE_MCP_SERVERS (JSON array of {id,url,prefix}).
+- When enabled, upstream tools/prompts are surfaced under their prefix. Default upstream: MoonLauncher (https://moonlauncher.app/mcp, prefix ml_), adding ml_start_launch, ml_launch_token, ml_launch_status, ml_token_info, ml_creator_fees and the ml_launch prompt. These are non-custodial: launches return an approveUrl the user signs in their own wallet.
+
 ### MCP JSON-RPC examples
 # list tools
 curl -s https://0xsoul.xyz/v1/mcp -H 'Content-Type: application/json' \\
@@ -465,6 +470,42 @@ curl -s https://0xsoul.xyz/v1/mcp -H 'Content-Type: application/json' \\
           error: { code: -32603, message: err?.message || "Internal error" },
         });
       }
+    });
+
+    // 手机确认锁 — HTTP 审批面（与 MCP gang_approve 同一执行路径，便于 owner 用签名直接审批）
+    this.fastify.post("/v1/confirm/approve", async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = req.body as { requestId?: string; signature?: string; secondFactor?: string };
+      if (!body?.requestId || !body?.signature) {
+        return reply.status(400).send({ ok: false, error: "missing requestId or signature" });
+      }
+      const result = await this.mcpServer.executeTool("gang_approve", {
+        requestId: body.requestId,
+        signature: body.signature,
+        secondFactor: body.secondFactor,
+      });
+      return reply.send({ ok: (result as any)?.status === "EXECUTION_CONFIRMED", result });
+    });
+
+    this.fastify.post("/v1/confirm/status", async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = req.body as { requestId?: string };
+      const result = await this.mcpServer.executeTool("gang_confirm_status", { requestId: body?.requestId });
+      return reply.send(result);
+    });
+
+    // Kill switch：一键清空待确认队列、作废所有未批准意图（PDF 第 6 节第 5 点）
+    this.fastify.post("/v1/admin/kill-switch", async (req: FastifyRequest, reply: FastifyReply) => {
+      const adminKey = process.env.ADMIN_API_KEY;
+      const provided = (req.headers["x-admin-key"] as string) || (req.body as any)?.adminKey;
+      if (adminKey && provided !== adminKey) {
+        return reply.status(401).send({ ok: false, error: "unauthorized" });
+      }
+      if (!adminKey) {
+        console.warn("[kill-switch] ADMIN_API_KEY 未设置，kill switch 无鉴权保护，仅限受信网络。");
+      }
+      const reason = (req.body as any)?.reason || "kill-switch";
+      const cleared = this.mcpServer.confirmationService.clearAll(reason);
+      this.killSwitchEngaged = true;
+      return reply.send({ ok: true, cleared, killSwitchEngaged: true, reason });
     });
 
     // 阶梯定价查询 API
