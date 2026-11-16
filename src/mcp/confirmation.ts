@@ -42,6 +42,25 @@ export interface PendingIntent {
   result?: any;
 }
 
+/**
+ * 对账日志：每一笔「待确认 → 终态」的决策都落一条，供网页对账面板逐笔复查。
+ * decision 取自意图的终态：approve=批准执行 / reject=拒绝 / timeout=超时(沉默=拒绝) / kill=kill switch 作废。
+ */
+export interface AuditRecord {
+  requestId: string;
+  decision: 'approve' | 'reject' | 'timeout' | 'kill';
+  tier: Tier;
+  action: ConfirmAction;
+  agentIndex: number;
+  mint: string;
+  isBuy: boolean;
+  solAmount: number;
+  tokenAmount: number;
+  decidedAt: number;
+  txid?: string;
+  reason?: string;
+}
+
 export type Executor = (
   preview: TradePreviewResponse,
 ) => Promise<{ status: string; result: any; txid?: string }> | { status: string; result: any; txid?: string };
@@ -86,6 +105,8 @@ export class ConfirmationService {
   private policy: ConfirmPolicy;
   private approver: Approver | null;
   private pending = new Map<string, PendingIntent>();
+  private audit: AuditRecord[] = [];
+  private static readonly MAX_AUDIT = 200;
   private dailyCumulative = new Map<string, number>(); // `${yyyymmdd}|${agentIndex}` -> SOL
   private vetoChecker: ((preview: TradePreviewResponse, action: ConfirmAction) => string | null) | null = null;
   private sweepTimer?: ReturnType<typeof setInterval>;
@@ -220,6 +241,49 @@ export class ConfirmationService {
     return [...this.pending.values()];
   }
 
+  /** 对账日志（最新在前），供网页逐笔复查；上限 MAX_AUDIT 条。 */
+  listAudit(): AuditRecord[] {
+    return [...this.audit];
+  }
+
+  /** 当前阈值口径快照，供网页展示「分级规则」与模式徽标。 */
+  getPolicySnapshot() {
+    return {
+      allConfirm: this.policy.allConfirm,
+      exemptSingleSol: this.policy.exemptSingleSol,
+      strongSingleSol: this.policy.strongSingleSol,
+      dailyCumulativeSol: this.policy.dailyCumulativeSol,
+      validityMs: this.policy.validityMs,
+      forcedStrongTypes: this.policy.forcedStrongTypes,
+      forcedSoftTypes: this.policy.forcedSoftTypes,
+      slippageWarnPct: this.policy.slippageWarnPct,
+    };
+  }
+
+  private recordAudit(rec: AuditRecord) {
+    this.audit.unshift(rec);
+    if (this.audit.length > ConfirmationService.MAX_AUDIT) {
+      this.audit.length = ConfirmationService.MAX_AUDIT;
+    }
+  }
+
+  private auditFromIntent(intent: PendingIntent, decision: AuditRecord['decision'], extra?: Partial<AuditRecord>): AuditRecord {
+    const p = intent.preview;
+    return {
+      requestId: intent.requestId,
+      decision,
+      tier: intent.tier,
+      action: intent.action,
+      agentIndex: p.agentIndex,
+      mint: p.mint,
+      isBuy: p.isBuy,
+      solAmount: p.solAmount,
+      tokenAmount: p.tokenAmount,
+      decidedAt: Date.now(),
+      ...extra,
+    };
+  }
+
   /**
    * 批准一笔待确认意图。签名须覆盖 `${previewHash}|${requestId}|${expiresAt}`。
    * 篡改（预览任一字段变化导致哈希变化）会使验签失败 -> 拒绝。
@@ -239,6 +303,7 @@ export class ConfirmationService {
       intent.status = 'EXPIRED';
       intent.decision = 'timeout';
       this.pending.delete(requestId);
+      this.recordAudit(this.auditFromIntent(intent, 'timeout', { reason: '确认已超时（沉默=拒绝）' }));
       return { ok: false, status: 'EXPIRED', reason: '确认已超时（沉默=拒绝）' };
     }
 
@@ -255,6 +320,7 @@ export class ConfirmationService {
       intent.decision = 'reject';
       intent.decisionReason = '签名校验失败（可能预览被篡改或签名无效）';
       this.pending.delete(requestId);
+      this.recordAudit(this.auditFromIntent(intent, 'reject', { reason: intent.decisionReason }));
       return { ok: false, status: 'REJECTED', reason: intent.decisionReason };
     }
 
@@ -267,6 +333,7 @@ export class ConfirmationService {
 
     const out = await this.runExecutor(intent, executor);
     this.pending.delete(requestId);
+    this.recordAudit(this.auditFromIntent(intent, 'approve', { txid: out.txid, reason: 'owner 确认签名通过' }));
     return { ok: true, status: 'EXECUTED', result: out.result };
   }
 
@@ -277,6 +344,7 @@ export class ConfirmationService {
     intent.decision = 'reject';
     intent.decisionReason = reason;
     this.pending.delete(requestId);
+    this.recordAudit(this.auditFromIntent(intent, 'reject', { reason }));
     return { ok: true, status: 'REJECTED' };
   }
 
@@ -289,6 +357,7 @@ export class ConfirmationService {
         intent.status = 'EXPIRED';
         intent.decision = 'timeout';
         this.pending.delete(id);
+        this.recordAudit(this.auditFromIntent(intent, 'timeout', { reason: '确认超时（沉默=拒绝）' }));
         expired.push(id);
       }
     }
@@ -302,6 +371,7 @@ export class ConfirmationService {
       intent.status = 'REJECTED';
       intent.decision = 'kill';
       intent.decisionReason = reason;
+      this.recordAudit(this.auditFromIntent(intent, 'kill', { reason }));
     }
     this.pending.clear();
     return count;

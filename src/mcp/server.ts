@@ -591,7 +591,11 @@ export class GangSoulMcpServer {
       case 'gang_confirm_status': {
         const id = args.requestId;
         if (!id) {
-          return { pending: this.confirmation.listPending() };
+          return {
+            pending: this.confirmation.listPending(),
+            audit: this.confirmation.listAudit(),
+            policy: this.confirmation.getPolicySnapshot(),
+          };
         }
         const intent = this.confirmation.getPending(id);
         return intent

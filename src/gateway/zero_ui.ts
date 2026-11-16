@@ -539,6 +539,38 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
           <a href="/docs#mcp" style="flex:1;text-align:center;background:rgba(157,0,255,0.1);border:1px solid var(--accent-purple);color:var(--accent-purple);padding:0.45rem;border-radius:4px;text-decoration:none;font-weight:bold;font-size:0.75rem;" data-en="Setup Guide ➔">接入指南 ➔</a>
         </div>
       </div>
+
+      <!-- 🔐 手机确认锁 · 状态与对账面板（只读：待确认队列 + 对账日志） -->
+      <div class="panel" id="confirm-panel">
+        <div class="panel-title">
+          <span data-en="🔐 Mobile Confirm Lock">🔐 手机确认锁 · 状态与对账</span>
+          <span id="confirm-mode-badge" class="badge" style="font-size:0.68rem;padding:2px 8px;" data-en="Loading…">读取中…</span>
+        </div>
+        <div style="font-size:0.68rem;color:#64748b;margin-bottom:0.7rem;line-height:1.4;" data-en="Read-only view. Approval signatures stay on owner's phone, never on this page.">
+          只读视图。批准签名在 owner 手机端产生，本页不提供批准入口。
+        </div>
+
+        <!-- 待确认队列 -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+          <span style="color:var(--accent-gold);font-weight:bold;font-size:0.82rem;" data-en="⏳ Pending Queue">⏳ 待确认队列</span>
+          <span id="confirm-pending-count" style="font-size:0.72rem;color:#64748b;" data-en="0">0</span>
+        </div>
+        <div id="confirm-pending-list" style="display:flex;flex-direction:column;gap:0.4rem;max-height:210px;overflow-y:auto;">
+          <div id="confirm-pending-empty" style="color:#64748b;font-size:0.75rem;" data-en="No pending trades — all clear.">无待确认交易 — 一切正常。</div>
+        </div>
+
+        <!-- 分级阈值口径 -->
+        <div id="confirm-policy" style="margin-top:0.6rem;padding:0.45rem 0.55rem;background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:4px;font-size:0.68rem;color:#94a3b8;line-height:1.5;display:none;"></div>
+
+        <!-- 对账日志 -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:0.8rem 0 0.4rem;">
+          <span style="color:var(--accent-cyan);font-weight:bold;font-size:0.82rem;" data-en="📜 Reconciliation Log">📜 对账日志</span>
+          <span id="confirm-audit-count" style="font-size:0.72rem;color:#64748b;" data-en="0">0</span>
+        </div>
+        <div id="confirm-audit-list" style="display:flex;flex-direction:column;gap:0.35rem;max-height:240px;overflow-y:auto;">
+          <div id="confirm-audit-empty" style="color:#64748b;font-size:0.75rem;" data-en="No decisions recorded yet.">暂无决策记录。</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -871,6 +903,133 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
       });
     }
 
+    // ===== 手机确认锁 · 状态与对账面板 =====
+    const TIER_LABEL = { EXEMPT: '免确认', SOFT: '一点确认', STRONG: '强确认' };
+    const TIER_COLOR = { EXEMPT: '#00ff66', SOFT: '#f0b429', STRONG: '#ff3366' };
+    const DECISION_LABEL = { approve: '已批准执行', reject: '已拒绝', timeout: '超时作废', kill: 'Kill作废' };
+    const DECISION_COLOR = { approve: '#00ff66', reject: '#ff3366', timeout: '#f0b429', kill: '#ff3366' };
+    const ACTION_LABEL = { buy: '买入', sell: '卖出', graduate: '毕业', transfer: '转账', config: '改配置', other: '其他' };
+
+    function confirmTierBadge(tier) {
+      const c = TIER_COLOR[tier] || '#94a3b8';
+      const label = TIER_LABEL[tier] || tier || '—';
+      return '<span style="display:inline-block;padding:1px 6px;border-radius:99px;font-size:0.62rem;color:' + c +
+        ';background:' + c + '18;border:1px solid ' + c + '66;">' + label + '</span>';
+    }
+    function confirmDecisionBadge(decision) {
+      const c = DECISION_COLOR[decision] || '#94a3b8';
+      const label = DECISION_LABEL[decision] || decision || '—';
+      return '<span style="display:inline-block;padding:1px 6px;border-radius:99px;font-size:0.62rem;color:' + c +
+        ';background:' + c + '18;border:1px solid ' + c + '66;">' + label + '</span>';
+    }
+    function confirmTimeLeft(expiresAt) {
+      const s = Math.max(0, Math.floor((Number(expiresAt) - Date.now()) / 1000));
+      if (s <= 0) return '已过期';
+      return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    }
+
+    function renderConfirmPending(pending) {
+      const list = document.getElementById('confirm-pending-list');
+      const count = document.getElementById('confirm-pending-count');
+      const empty = document.getElementById('confirm-pending-empty');
+      if (!list) return;
+      const arr = Array.isArray(pending) ? pending : [];
+      if (count) count.textContent = arr.length;
+      list.querySelectorAll('.confirm-row').forEach(n => n.remove());
+      if (arr.length === 0) { if (empty) empty.style.display = ''; return; }
+      if (empty) empty.style.display = 'none';
+      arr.forEach(p => {
+        const pv = p.preview || {};
+        const row = document.createElement('div');
+        row.className = 'confirm-row';
+        row.style.cssText = 'padding:0.45rem 0.55rem;background:rgba(240,180,41,0.05);border-left:2px solid rgba(240,180,41,0.5);border-radius:4px;';
+        const head = document.createElement('div');
+        head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:0.4rem;margin-bottom:0.3rem;';
+        const headL = document.createElement('span');
+        headL.style.cssText = 'font-size:0.74rem;color:#e2e8f0;font-weight:bold;';
+        headL.innerHTML = confirmTierBadge(p.tier) + ' <span style="color:#94a3b8;font-weight:normal;">' +
+          (ACTION_LABEL[p.action] || (pv.isBuy ? '买入' : '卖出')) + ' · Agent#' + (pv.agentIndex ?? 0) + '</span>';
+        const headR = document.createElement('span');
+        headR.style.cssText = 'font-size:0.68rem;color:#f0b429;white-space:nowrap;';
+        headR.textContent = '⏳ ' + confirmTimeLeft(p.expiresAt);
+        head.appendChild(headL); head.appendChild(headR);
+        const body = document.createElement('div');
+        body.style.cssText = 'font-size:0.68rem;color:#94a3b8;line-height:1.5;word-break:break-all;';
+        body.innerHTML =
+          '<span style="color:var(--accent-cyan)">' + shortAddr(pv.mint) + '</span> · ' +
+          fmtNum(pv.solAmount) + ' SOL → ' + fmtNum(pv.tokenAmount) + ' tok · ' +
+          '价 ' + fmtNum(pv.estimatedPriceSol) + ' · 滑点 ' + fmtNum(pv.slippagePct) + '%' +
+          (pv.note ? '<br><span style="color:#64748b">' + String(pv.note).slice(0, 70) + '</span>' : '') +
+          '<br><span style="color:#475569">预览哈希 ' + shortAddr(p.previewHash) + ' · ' + shortAddr(p.requestId) + '</span>';
+        row.appendChild(head); row.appendChild(body);
+        list.appendChild(row);
+      });
+    }
+
+    function renderConfirmAudit(audit) {
+      const list = document.getElementById('confirm-audit-list');
+      const count = document.getElementById('confirm-audit-count');
+      const empty = document.getElementById('confirm-audit-empty');
+      if (!list) return;
+      const arr = Array.isArray(audit) ? audit : [];
+      if (count) count.textContent = arr.length;
+      list.querySelectorAll('.audit-row').forEach(n => n.remove());
+      if (arr.length === 0) { if (empty) empty.style.display = ''; return; }
+      if (empty) empty.style.display = 'none';
+      arr.slice(0, 40).forEach(a => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;flex-direction:column;gap:0.15rem;padding:0.35rem 0.5rem;background:rgba(0,0,0,0.25);border-left:2px solid ' +
+          (DECISION_COLOR[a.decision] || '#475569') + '88;border-radius:4px;';
+        const head = document.createElement('div');
+        head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:0.4rem;';
+        const time = a.decidedAt ? new Date(a.decidedAt).toLocaleTimeString() : '—';
+        head.innerHTML = confirmDecisionBadge(a.decision) +
+          ' <span style="font-size:0.66rem;color:#64748b;">' + (ACTION_LABEL[a.action] || (a.isBuy ? '买入' : '卖出')) +
+          ' · ' + fmtNum(a.solAmount) + ' SOL</span>' +
+          '<span style="font-size:0.62rem;color:#475569;white-space:nowrap;">' + time + '</span>';
+        const sub = document.createElement('div');
+        sub.style.cssText = 'font-size:0.62rem;color:#64748b;word-break:break-all;';
+        sub.innerHTML = shortAddr(a.mint) + ' · ' + shortAddr(a.requestId) +
+          (a.txid ? ' · tx ' + shortAddr(a.txid) : '') +
+          (a.reason ? '<br><span style="color:#475569">' + String(a.reason).slice(0, 60) + '</span>' : '');
+        row.appendChild(head); row.appendChild(sub);
+        list.appendChild(row);
+      });
+    }
+
+    function renderConfirmPolicy(policy) {
+      const box = document.getElementById('confirm-policy');
+      if (!box || !policy) return;
+      const mode = document.getElementById('confirm-mode-badge');
+      if (mode) {
+        const label = policy.allConfirm ? '全确认模式' : '三档分级';
+        mode.textContent = label;
+        mode.setAttribute('data-en', policy.allConfirm ? 'All-confirm' : '3-Tier');
+        mode.style.color = policy.allConfirm ? '#ff3366' : '#00ff66';
+        mode.style.borderColor = policy.allConfirm ? 'rgba(255,51,102,0.5)' : 'rgba(0,255,102,0.5)';
+      }
+      box.style.display = '';
+      box.innerHTML =
+        '<span data-en="Exempt ≤">免确认 ≤</span> <b style="color:#00ff66;">' + fmtNum(policy.exemptSingleSol) + '</b> SOL · ' +
+        '<span data-en="Strong ≥">强确认 ≥</span> <b style="color:#ff3366;">' + fmtNum(policy.strongSingleSol) + '</b> SOL · ' +
+        '<span data-en="Daily cap">日累计</span> <b style="color:#f0b429;">' + fmtNum(policy.dailyCumulativeSol) + '</b> SOL · ' +
+        '<span data-en="Validity">有效期</span> ' + Math.round(Number(policy.validityMs) / 60000) + ' min<br>' +
+        '<span style="color:#475569;" data-en="Sell/graduate/transfer/config → strong confirm; approval signature stays on owner phone.">卖出/毕业/转账/改配置 → 强确认；批准签名仅在 owner 手机端。</span>';
+    }
+
+    async function fetchConfirmState() {
+      try {
+        const res = await fetch('/v1/confirm/status', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        renderConfirmPending(data.pending);
+        renderConfirmAudit(data.audit);
+        renderConfirmPolicy(data.policy);
+      } catch (err) {}
+    }
+
     // 初始从 0 滚到默认值，即使后端慢/失败页面也"活"着
     function bootTween() {
       animateValue(document.getElementById('num-agents'), 10, 0, 1400);
@@ -882,6 +1041,9 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
     bootTween();
     fetchTerminalState();
     setInterval(fetchTerminalState, 5000);
+    // 手机确认锁：单独 3s 轮询状态与对账（独立的轻量端点）
+    fetchConfirmState();
+    setInterval(fetchConfirmState, 3000);
 
     // 网格量化收益小幅抖动，强化"实时感"
     setInterval(() => {
