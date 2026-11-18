@@ -462,6 +462,10 @@ curl -s https://0xsoul.xyz/v1/mcp -H 'Content-Type: application/json' \\
       }
       try {
         const result = await this.mcpServer.handleJsonRpc(body);
+        // JSON-RPC 通知（如 notifications/initialized）无响应体：按 MCP 规范返回 202 Accepted。
+        if (result == null) {
+          return reply.status(202).send();
+        }
         return reply.send(result);
       } catch (err: any) {
         return reply.status(500).send({

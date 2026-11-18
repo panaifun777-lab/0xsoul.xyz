@@ -713,6 +713,38 @@ export class GangSoulMcpServer {
 
   public async handleJsonRpc(req: any): Promise<any> {
     const { id, method, params } = req;
+
+    // MCP 标准握手（Streamable HTTP / stdio 通用）。纯协议层，不触碰钱包/确认/签名/数据源。
+    // 修复文书 Step 0 头号缺陷：initialize 此前落 -32601，标准客户端（Claude/Cursor/Cline）连不上。
+    if (method === 'initialize') {
+      const requested = params?.protocolVersion;
+      const version =
+        requested === '2024-11-05' || requested === '2025-03-26' || requested === '2025-06-18'
+          ? requested
+          : '2024-11-05';
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          protocolVersion: version,
+          capabilities: {
+            tools: { listChanged: false },
+            prompts: { listChanged: false },
+          },
+          serverInfo: { name: '0xsoul-gateway', version: '1.0.0' },
+          instructions:
+            '0x.SOUL hosted MCP. Read-only tools need no confirmation; trade_execute requires an approval token from the gateway confirmation lock.',
+        },
+      };
+    }
+    // notifications/initialized 是客户端通知（无 id），无需响应体；返回 null 让 HTTP 层发 204。
+    if (method === 'notifications/initialized' || method === 'notifications/cancelled') {
+      return null;
+    }
+    if (method === 'ping') {
+      return { jsonrpc: '2.0', id, result: {} };
+    }
+
     if (method === 'tools/list') {
       return {
         jsonrpc: '2.0',

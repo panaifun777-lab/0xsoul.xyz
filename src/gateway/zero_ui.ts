@@ -331,6 +331,109 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
     .tk .up { color: var(--accent-green); }
     .tk .down { color: var(--accent-red); }
     .tk .dot { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+
+    /* ===== Command Deck（mockup 重设计：搜索 + KPI + 三栏指挥台） ===== */
+    .deck { position: relative; z-index: 1; margin-bottom: 18px; }
+
+    .searchbar {
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-top: 2px solid var(--accent-cyan);
+      border-radius: 6px; padding: 0.55rem 0.75rem; margin-bottom: 14px;
+      box-shadow: 0 0 18px rgba(0,229,255,0.08);
+    }
+    .searchbar .s-icon { color: var(--accent-cyan); font-size: 0.78rem; font-weight: bold; letter-spacing: 1px; }
+    .searchbar input {
+      flex: 1; min-width: 180px; background: #04060b; color: var(--text-main);
+      border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.7rem;
+      font-family: var(--font-mono); font-size: 0.85rem; outline: none;
+    }
+    .searchbar input:focus { border-color: var(--accent-cyan); box-shadow: 0 0 8px rgba(0,229,255,0.2); }
+    .searchbar input::placeholder { color: #475569; }
+    .btn-cy {
+      background: rgba(0,229,255,0.12); border: 1px solid var(--accent-cyan); color: var(--accent-cyan);
+      padding: 0.42rem 0.85rem; border-radius: 4px; font-family: var(--font-mono);
+      font-size: 0.78rem; font-weight: bold; cursor: pointer; white-space: nowrap; transition: 0.2s;
+    }
+    .btn-cy:hover { background: var(--accent-cyan); color: #000; box-shadow: 0 0 12px var(--accent-cyan); }
+    .btn-pu {
+      background: rgba(157,0,255,0.12); border: 1px solid var(--accent-purple); color: #c77dff;
+      padding: 0.42rem 0.85rem; border-radius: 4px; font-family: var(--font-mono);
+      font-size: 0.78rem; font-weight: bold; cursor: pointer; white-space: nowrap; transition: 0.2s;
+    }
+    .btn-pu:hover { background: var(--accent-purple); color: #fff; box-shadow: 0 0 12px var(--accent-purple); }
+    #domain-search-result { flex-basis: 100%; font-size: 0.76rem; color: #94a3b8; padding: 0.3rem 0.1rem 0; min-height: 1rem; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+    @media(max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media(max-width: 620px) { .kpi-grid { grid-template-columns: 1fr; } }
+    .kpi {
+      background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.85rem 0.95rem; position: relative; overflow: hidden;
+    }
+    .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--accent-cyan), transparent); }
+    .kpi-label { font-size: 0.7rem; color: #64748b; display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; margin-bottom: 0.35rem; }
+    .kpi-val { font-size: 1.55rem; font-weight: 900; color: #e8f1ff; letter-spacing: -0.5px; line-height: 1.1; }
+    .kpi-val .unit { font-size: 0.8rem; font-weight: normal; color: #64748b; }
+    .kpi-sub { font-size: 0.66rem; color: #64748b; margin-top: 0.3rem; }
+    .src-badge {
+      font-size: 0.57rem; padding: 1px 6px; border-radius: 99px; font-weight: bold;
+      border: 1px solid currentColor; white-space: nowrap;
+    }
+    .src-seed { color: #f0b429; background: rgba(240,180,41,0.1); }
+    .src-live { color: #00ff66; background: rgba(0,255,102,0.1); }
+    .src-warn { color: #ff3366; background: rgba(255,51,102,0.1); }
+
+    .deck-grid { display: grid; grid-template-columns: 300px 1fr 340px; gap: 14px; }
+    @media(max-width: 1280px) { .deck-grid { grid-template-columns: 1fr 1fr; } }
+    @media(max-width: 820px) { .deck-grid { grid-template-columns: 1fr; } }
+    .deck-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+    .deck-card h3 {
+      font-size: 0.88rem; color: var(--accent-cyan); margin-bottom: 0.8rem;
+      display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+      border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;
+    }
+    .mesh-canvas { width: 100%; height: 170px; display: block; background: #030509; border: 1px solid var(--border); border-radius: 6px; }
+    .agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 0.7rem; }
+    .agent-chip {
+      display: flex; justify-content: space-between; align-items: center; gap: 0.3rem;
+      background: #05070d; border: 1px solid var(--border); border-radius: 4px;
+      padding: 0.35rem 0.45rem; font-size: 0.66rem;
+    }
+    .agent-chip .nm { color: #cbd5e1; font-weight: bold; }
+    .agent-chip .st { font-size: 0.57rem; color: #64748b; }
+    .agent-chip .dot { width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+
+    .grad-row { display: flex; gap: 1rem; align-items: center; }
+    .gauge-wrap { position: relative; width: 132px; height: 132px; flex: 0 0 132px; }
+    .gauge-wrap svg { transform: rotate(-90deg); }
+    .gauge-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .gauge-center .pct { font-size: 1.7rem; font-weight: 900; color: var(--accent-cyan); }
+    .gauge-center .cap { font-size: 0.58rem; color: #64748b; }
+    .grad-info { flex: 1; font-size: 0.74rem; color: #cbd5e1; line-height: 1.7; }
+    .grad-info .big { font-size: 1.15rem; font-weight: 900; color: #fff; }
+    .grad-info .kv { color: #64748b; }
+    .curve-svg { width: 100%; height: 110px; margin-top: 0.6rem; background: #04060b; border: 1px solid var(--border); border-radius: 6px; }
+
+    .tier-switch { display: flex; gap: 4px; }
+    .tier-switch button {
+      background: transparent; border: 1px solid var(--border); color: #64748b;
+      padding: 2px 8px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.64rem; cursor: pointer;
+    }
+    .tier-switch button.active { background: rgba(0,229,255,0.12); border-color: var(--accent-cyan); color: var(--accent-cyan); }
+    .x402-tier {
+      display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+      padding: 0.5rem 0.6rem; margin-bottom: 6px; border-radius: 5px;
+      background: #05070d; border: 1px solid var(--border);
+    }
+    .x402-tier.featured { border-color: rgba(157,0,255,0.6); background: rgba(157,0,255,0.07); }
+    .x402-tier .tid { font-size: 0.6rem; color: var(--accent-purple); font-weight: bold; border: 1px solid var(--accent-purple); border-radius: 3px; padding: 1px 5px; }
+    .x402-tier .tname { font-size: 0.74rem; color: #cbd5e1; font-weight: bold; }
+    .x402-tier .tdesc { font-size: 0.6rem; color: #64748b; }
+    .x402-tier .tprice { font-size: 0.8rem; font-weight: bold; color: var(--accent-green); white-space: nowrap; text-align: right; }
+    .x402-tier .tusd { font-size: 0.58rem; color: #64748b; display: block; }
+    .x402-note { font-size: 0.6rem; color: #f0b429; margin-top: 0.5rem; line-height: 1.5; }
+    .deck-divider { font-size: 0.66rem; color: #475569; letter-spacing: 2px; margin: 20px 0 10px; text-align: center; }
   </style>
 </head>
 <body>
@@ -351,6 +454,103 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
       <div id="conn-status" style="font-size: 0.82rem; color: var(--accent-green);" data-en="● SSE & live stream online">● SSE 与实时流在线</div>
     </div>
   </header>
+
+  <!-- ============ COMMAND DECK · 参考 UI 重设计 mockup ============ -->
+  <div class="deck">
+    <!-- 搜索栏：.soul 域名查询（接 /api/domain/price） -->
+    <div class="searchbar">
+      <span class="s-icon" data-en="⌕ SEARCH">⌕ SEARCH</span>
+      <input id="deck-domain-input" type="text" placeholder="输入名字，查 .soul 域名 ~ 例如 gangster" data-en="Enter a name to check .soul domain ~ e.g. gangster" />
+      <span class="src-badge src-live">.soul</span>
+      <button type="button" id="deck-domain-btn" class="btn-cy" data-en="查询">查询</button>
+      <button type="button" id="deck-wallet-btn" class="btn-pu" data-en="◇ 连接钱包">◇ 连接钱包</button>
+      <button type="button" id="deck-demo-btn" class="btn-cy" data-en="▶ 演示遮罩">▶ 演示遮罩</button>
+      <div id="domain-search-result" data-en=""></div>
+    </div>
+
+    <!-- 4 张 KPI 卡（绑定真实数据源 + 来源徽标） -->
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-label"><span data-en="毕业进度 · BONDING">毕业进度 · BONDING</span><span id="deck-grad-badge" class="src-badge src-seed" data-en="SEED">SEED · 种子值</span></div>
+        <div class="kpi-val"><span id="deck-raised">4.80</span><span class="unit"> / <span id="deck-target">50</span> SOL</span></div>
+        <div class="kpi-sub"><span id="deck-pct">9.6</span>% · <span data-en="dataSource = seed, 非链上读数">dataSource = seed, 非链上读数</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label"><span data-en="$GSOUL 池内储备">$GSOUL 池内储备</span><span class="src-badge src-seed" data-en="SIM">SIM · 模拟</span></div>
+        <div class="kpi-val"><span id="deck-reserve">0.4182</span><span class="unit"> SOL</span></div>
+        <div class="kpi-sub" data-en="网格收益区间 0.4178 ~ 0.4182 · 模拟漂移">网格收益区间 0.4178 ~ 0.4182 · 模拟漂移</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label"><span data-en="ARC 总供应">ARC 总供应</span><span id="deck-arc-badge" class="src-badge src-seed" data-en="SEED">种子待铸造</span></div>
+        <div class="kpi-val"><span id="deck-arc-supply">0</span></div>
+        <div class="kpi-sub"><span data-en="计划 1,073,000,000 · 链上已铸">计划 1,073,000,000 · 链上已铸</span> <span id="deck-arc-real">0</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label"><span data-en="在线 AGENT">在线 AGENT</span><span id="deck-agent-badge" class="src-badge src-live" data-en="ON-CHAIN">ON-CHAIN · 常态</span></div>
+        <div class="kpi-val"><span id="deck-agents">6</span><span class="unit"> / 6 SWARM</span></div>
+        <div class="kpi-sub" data-en="Cyclops·Degen·Pincher·Razgon·Sniffer·Surfer">Cyclops·Degen·Pincher·Razgon·Sniffer·Surfer</div>
+      </div>
+    </div>
+
+    <!-- 三栏：SWARM MESH / GRADUATION / x402 -->
+    <div class="deck-grid">
+      <!-- SWARM MESH -->
+      <div class="deck-card">
+        <h3><span data-en="✦ SWARM MESH · 蜂群">✦ SWARM MESH · 蜂群</span><span class="src-badge src-live" data-en="6 NODES">6 NODES</span></h3>
+        <canvas id="deck-mesh" class="mesh-canvas"></canvas>
+        <div class="agent-grid" id="deck-agent-grid">
+          <div class="agent-chip"><span class="nm">CYCLOPS</span><span class="st" data-en="单 agent 侦察">单 agent 侦察</span><span class="dot" style="color:#00ff66;background:#00ff66"></span></div>
+          <div class="agent-chip"><span class="nm">DEGEN</span><span class="st" data-en="激进开仓">激进开仓</span><span class="dot" style="color:#9d00ff;background:#9d00ff"></span></div>
+          <div class="agent-chip"><span class="nm">PINCHER</span><span class="st" data-en="夹子防守">夹子防守</span><span class="dot" style="color:#00e5ff;background:#00e5ff"></span></div>
+          <div class="agent-chip"><span class="nm">RAZGON</span><span class="st" data-en="趋势追踪">趋势追踪</span><span class="dot" style="color:#f0b429;background:#f0b429"></span></div>
+          <div class="agent-chip"><span class="nm">SNIFFER</span><span class="st" data-en="嗅探风控">嗅探风控</span><span class="dot" style="color:#ff3366;background:#ff3366"></span></div>
+          <div class="agent-chip"><span class="nm">SURFER</span><span class="st" data-en="冲浪跟随">冲浪跟随</span><span class="dot" style="color:#00e5ff;background:#00e5ff"></span></div>
+        </div>
+      </div>
+
+      <!-- GRADUATION 曲线仪表盘 -->
+      <div class="deck-card">
+        <h3><span data-en="◈ GRADUATION · 毕业曲线">◈ GRADUATION · 毕业曲线</span><span id="deck-grad-badge2" class="src-badge src-seed" data-en="SEED">SEED · 种子口径</span></h3>
+        <div class="grad-row">
+          <div class="gauge-wrap">
+            <svg width="132" height="132" viewBox="0 0 132 132">
+              <circle cx="66" cy="66" r="56" fill="none" stroke="#151d2f" stroke-width="10" />
+              <circle id="deck-gauge-arc" cx="66" cy="66" r="56" fill="none" stroke="#00e5ff" stroke-width="10"
+                stroke-linecap="round" stroke-dasharray="351.86" stroke-dashoffset="318" style="filter:drop-shadow(0 0 6px #00e5ff)" />
+            </svg>
+            <div class="gauge-center"><span class="pct"><span id="deck-pct2">9.6</span>%</span><span class="cap" data-en="TO GRADUATION">TO GRADUATION</span></div>
+          </div>
+          <div class="grad-info">
+            <div><span data-en="还差 ">还差 </span><span class="big" id="deck-remaining">45.20</span><span class="big"> SOL</span><span data-en=" 毕业"> 毕业</span></div>
+            <div class="kv">CURVE <span style="color:#00e5ff">bonding · exponential</span></div>
+            <div class="kv">TARGET <span id="deck-target2">50.00</span> SOL · RAISED <span id="deck-raised2">4.80</span> SOL</div>
+            <div class="kv">SOURCE <span id="deck-source">state.dataSource = seed</span></div>
+          </div>
+        </div>
+        <svg id="deck-curve" class="curve-svg" viewBox="0 0 600 110" preserveAspectRatio="none">
+          <defs><linearGradient id="curveFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00e5ff" stop-opacity="0.35"/><stop offset="100%" stop-color="#00e5ff" stop-opacity="0"/></linearGradient></defs>
+          <line x1="0" y1="100" x2="600" y2="100" stroke="#1a2338" stroke-width="1"/>
+          <path id="deck-curve-path" d="" fill="none" stroke="#00e5ff" stroke-width="2.5" style="filter:drop-shadow(0 0 4px #00e5ff)"/>
+          <circle id="deck-curve-now" cx="0" cy="100" r="4" fill="#f0b429"/>
+        </svg>
+      </div>
+
+      <!-- x402 四档定价 -->
+      <div class="deck-card">
+        <h3><span data-en="▲ x402 · 按次结算">▲ x402 · 按次结算</span>
+          <span class="tier-switch"><button type="button" id="deck-unit-sol" class="active">SOL</button><button type="button" id="deck-unit-usd">USD</button></span>
+        </h3>
+        <div id="deck-tiers">
+          <div class="x402-tier"><span class="tid">P1</span><div style="flex:1"><div class="tname" data-en="PULSE 脉冲档">PULSE 脉冲档</div><div class="tdesc" data-en="单次无状态调用 · 行情快照">单次无状态调用 · 行情快照</div></div><div class="tprice"><span class="sol" data-sol="0.0014067">0.0014067</span> <span class="tunit">SOL</span><span class="tusd">≈ $0.10</span></div></div>
+          <div class="x402-tier"><span class="tid">P2</span><div style="flex:1"><div class="tname" data-en="SCOUT 侦察档">SCOUT 侦察档</div><div class="tdesc" data-en="池子扫描 · 风险标签">池子扫描 · 风险标签</div></div><div class="tprice"><span class="sol" data-sol="0.0070333">0.0070333</span> <span class="tunit">SOL</span><span class="tusd">≈ $0.50</span></div></div>
+          <div class="x402-tier featured"><span class="tid">P3</span><div style="flex:1"><div class="tname" data-en="SWARM 蜂群档">SWARM 蜂群档</div><div class="tdesc" data-en="6 agent 协同研判一次">6 agent 协同研判一次</div></div><div class="tprice"><span class="sol" data-sol="0.0281334">0.0281334</span> <span class="tunit">SOL</span><span class="tusd">≈ $2.00</span></div></div>
+          <div class="x402-tier"><span class="tid">P4</span><div style="flex:1"><div class="tname" data-en="APEX 顶点档">APEX 顶点档</div><div class="tdesc" data-en="全链路托付 · 含递归">全链路托付 · 含递归</div></div><div class="tprice"><span class="sol" data-sol="0.1406668">0.1406668</span> <span class="tunit">SOL</span><span class="tusd">≈ $10.00</span></div></div>
+        </div>
+        <div class="x402-note" id="deck-price-note" data-en="价格随 SOL 市价折算，阈值以 SOL 计价；档位定价见 /v1/signals/alpha?tier=">价格随 SOL 市价折算，阈值以 SOL 计价；档位定价见 /v1/signals/alpha?tier=</div>
+      </div>
+    </div>
+    <div class="deck-divider" data-en="▼ DETAILED TELEMETRY · 详细遥测 ▼">▼ DETAILED TELEMETRY · 详细遥测 ▼</div>
+  </div>
 
   <div class="main-container">
     <div>
@@ -1029,6 +1229,181 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         renderConfirmPolicy(data.policy);
       } catch (err) {}
     }
+
+    // ===== Command Deck：mockup 重设计交互 =====
+    // 1) .soul 域名查询（真实调用 /api/domain/price）
+    async function deckDomainSearch() {
+      const input = document.getElementById('deck-domain-input');
+      const out = document.getElementById('domain-search-result');
+      if (!input || !out) return;
+      const name = (input.value || '').trim();
+      if (!name) { out.textContent = (document.documentElement.lang === 'en' ? 'Enter a name first.' : '请先输入名字。'); return; }
+      out.textContent = (document.documentElement.lang === 'en' ? 'Querying ARC on-chain pricing…' : '正在查询 ARC 链上定价…');
+      try {
+        const res = await fetch('/api/domain/price', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain: name }),
+        });
+        const j = await res.json();
+        if (j && j.success && j.pricing) {
+          const p = j.pricing;
+          const en = document.documentElement.lang === 'en';
+          out.innerHTML = (en ? 'Domain ' : '域名 ') +
+            '<b style="color:var(--accent-cyan)">' + p.domain + '</b>' +
+            (en ? ' · tier ' : ' · 档位 ') + '<span style="color:var(--accent-purple)">' + p.tier + '</span>' +
+            (en ? ' · price ' : ' · 价格 ') + '<b style="color:var(--accent-green)">' + p.priceUsdc + ' USDC</b>' +
+            ' · units ' + p.priceUnits;
+        } else {
+          out.textContent = (document.documentElement.lang === 'en' ? 'Query failed: ' : '查询失败：') + (j?.error || 'unknown');
+        }
+      } catch (e) { out.textContent = (document.documentElement.lang === 'en' ? 'Query error.' : '查询出错。'); }
+    }
+    const dSearchBtn = document.getElementById('deck-domain-btn');
+    if (dSearchBtn) dSearchBtn.addEventListener('click', deckDomainSearch);
+    const dSearchInput = document.getElementById('deck-domain-input');
+    if (dSearchInput) dSearchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') deckDomainSearch(); });
+
+    // 2) 演示遮罩 / 连接钱包（明确标注为演示，不伪造功能）
+    const dDemoBtn = document.getElementById('deck-demo-btn');
+    if (dDemoBtn) dDemoBtn.addEventListener('click', () => {
+      const out = document.getElementById('domain-search-result');
+      if (out) out.textContent = (document.documentElement.lang === 'en'
+        ? 'Demo overlay: all telemetry here is seed/simulated, not live funds.'
+        : '演示遮罩：本页遥测为种子/模拟数据，非真实资金。');
+    });
+    const dWalletBtn = document.getElementById('deck-wallet-btn');
+    if (dWalletBtn) dWalletBtn.addEventListener('click', () => {
+      const out = document.getElementById('domain-search-result');
+      if (out) out.textContent = (document.documentElement.lang === 'en'
+        ? 'Wallet connect: production path uses owner confirmation key on phone (see Confirm Lock panel).'
+        : '连接钱包：生产路径使用手机端 owner 确认密钥（见手机确认锁面板），网页端不托管签名。');
+    });
+
+    // 3) x402 SOL / USD 切换（USD 参考价来自已抓取的 SOL CoinGecko 价）
+    let deckUnit = 'sol';
+    let SOL_USD_RATE = 0;
+    function deckRenderTiers() {
+      document.querySelectorAll('#deck-tiers .x402-tier').forEach(card => {
+        const el = card.querySelector('.sol');
+        const unit = card.querySelector('.tunit');
+        const tusd = card.querySelector('.tusd');
+        if (!el) return;
+        const sol = Number(el.getAttribute('data-sol'));
+        if (deckUnit === 'usd') {
+          const solUsd = SOL_USD_RATE > 0 ? SOL_USD_RATE : 71.09;
+          el.textContent = '$' + (sol * solUsd).toFixed(2);
+          if (unit) unit.textContent = 'USD';
+          if (tusd) tusd.textContent = '≈ ' + sol.toFixed(7) + ' SOL';
+        } else {
+          el.textContent = String(sol);
+          if (unit) unit.textContent = 'SOL';
+          if (tusd) tusd.textContent = '≈ $' + (sol * (SOL_USD_RATE > 0 ? SOL_USD_RATE : 71.09)).toFixed(2);
+        }
+      });
+    }
+    const uSol = document.getElementById('deck-unit-sol'), uUsd = document.getElementById('deck-unit-usd');
+    if (uSol) uSol.addEventListener('click', () => { deckUnit = 'sol'; uSol.classList.add('active'); uUsd.classList.remove('active'); deckRenderTiers(); });
+    if (uUsd) uUsd.addEventListener('click', () => { deckUnit = 'usd'; uUsd.classList.add('active'); uSol.classList.remove('active'); deckRenderTiers(); });
+
+    // 4) SWARM MESH 轻量画布（6 节点环形脉冲，独立于主拓扑）
+    (function initDeckMesh() {
+      const cv = document.getElementById('deck-mesh');
+      if (!cv) return;
+      const ctx = cv.getContext('2d');
+      const palette = ['#00ff66','#9d00ff','#00e5ff','#f0b429','#ff3366','#00e5ff'];
+      const N = 6;
+      let phase = 0;
+      function resize() { cv.width = cv.clientWidth; cv.height = cv.clientHeight; }
+      resize();
+      window.addEventListener('resize', resize);
+      function draw() {
+        const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.34;
+        ctx.clearRect(0, 0, W, H);
+        const pts = [];
+        for (let i = 0; i < N; i++) {
+          const a = (i / N) * Math.PI * 2 + Math.sin(phase * 0.3) * 0.08;
+          pts.push({ x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, c: palette[i] });
+        }
+        // links to center + neighbors
+        ctx.strokeStyle = 'rgba(0,229,255,0.18)'; ctx.lineWidth = 1;
+        pts.forEach(p => { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+        pts.forEach((p, i) => { const q = pts[(i + 1) % N]; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke(); });
+        // center
+        ctx.fillStyle = '#00e5ff'; ctx.shadowBlur = 14; ctx.shadowColor = '#00e5ff';
+        ctx.beginPath(); ctx.arc(cx, cy, 6 + Math.sin(phase) * 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        pts.forEach(p => {
+          ctx.fillStyle = p.c; ctx.shadowBlur = 10; ctx.shadowColor = p.c;
+          ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+        });
+        phase += 0.02;
+        requestAnimationFrame(draw);
+      }
+      draw();
+    })();
+
+    // 5) 毕业曲线（指数曲线 + 当前点，绑定 RAISED/PCT）
+    function deckRenderCurve(pct, raised, target) {
+      const path = document.getElementById('deck-curve-path');
+      const now = document.getElementById('deck-curve-now');
+      const gauge = document.getElementById('deck-gauge-arc');
+      if (gauge) {
+        const C = 351.86;
+        gauge.setAttribute('stroke-dashoffset', String(C * (1 - Math.min(100, Math.max(0, pct)) / 100)));
+      }
+      if (!path) return;
+      let d = 'M 0 100';
+      for (let i = 0; i <= 60; i++) {
+        const x = (i / 60) * 600;
+        const t = i / 60;
+        const y = 100 - Math.pow(t, 2.6) * 92;
+        d += ' L ' + x.toFixed(1) + ' ' + y.toFixed(1);
+      }
+      path.setAttribute('d', d);
+      if (now) {
+        const t = Math.min(1, Math.max(0, pct / 100));
+        const x = t * 600, y = 100 - Math.pow(t, 2.6) * 92;
+        now.setAttribute('cx', x.toFixed(1)); now.setAttribute('cy', y.toFixed(1));
+      }
+    }
+
+    // 6) 将 /v1/terminal/state 的真实/种子数据绑定到 Deck KPI
+    async function deckFetchState() {
+      try {
+        const res = await fetch('/v1/terminal/state');
+        const data = await res.json();
+        const ld = data?.token?.liquidityDepth || {};
+        const raised = ld.totalRaisedSol ?? 4.8, target = ld.graduationTargetSol ?? 50, pct = ld.bondingCurveProgressPercent ?? 9.6;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        set('deck-raised', Number(raised).toFixed(2)); set('deck-raised2', Number(raised).toFixed(2));
+        set('deck-target', String(target)); set('deck-target2', Number(target).toFixed(2));
+        set('deck-pct', Number(pct).toFixed(1)); set('deck-pct2', Number(pct).toFixed(1));
+        set('deck-remaining', Math.max(0, Number(target) - Number(raised)).toFixed(2));
+        deckRenderCurve(Number(pct), Number(raised), Number(target));
+        // 来源徽标
+        const grad = data?.graduation || {};
+        const onchain = grad.dataSource === 'onchain';
+        ['deck-grad-badge','deck-grad-badge2'].forEach(id => {
+          const b = document.getElementById(id);
+          if (b) { b.className = 'src-badge ' + (onchain ? 'src-live' : 'src-seed'); b.textContent = onchain ? 'ON-CHAIN' : 'SEED · 种子值'; }
+        });
+        const src = document.getElementById('deck-source');
+        if (src) src.textContent = 'state.dataSource = ' + (grad.dataSource || 'seed');
+        // ARC 供应
+        const arc = data?.arc?.onchain || {};
+        set('deck-arc-supply', (data?.arc?.plannedTotalSupplyTokens || 1073000000).toLocaleString('en-US'));
+        set('deck-arc-real', Number(arc.totalSupplyTokens || 0).toLocaleString('en-US'));
+        const ab = document.getElementById('deck-arc-badge');
+        if (ab) { const live = arc.dataSource === 'onchain'; ab.className = 'src-badge ' + (live ? 'src-live' : 'src-seed'); ab.textContent = live ? '链上读取' : '种子待铸造'; }
+        // SOL/USD 参考价（从 tickerData 里取 CoinGecko 已抓的 SOL 价）
+        const solT = tickerData.find(d => d.ref === 'solana');
+        if (solT && typeof solT.price === 'number' && solT.price > 0) SOL_USD_RATE = solT.price;
+        if (deckUnit === 'usd') deckRenderTiers();
+      } catch (e) {}
+    }
+    deckFetchState();
+    setInterval(deckFetchState, 5000);
 
     // 初始从 0 滚到默认值，即使后端慢/失败页面也"活"着
     function bootTween() {
