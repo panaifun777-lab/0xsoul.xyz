@@ -17,7 +17,7 @@ import {
   OnChainPaymentVerifier,
   createSolanaPaymentQuery,
 } from "../x402/onchain_verifier";
-import { resolveTier, priceForAsset, solAmountFor, TIER_PRICING } from "../x402/pricing";
+import { resolveTier, priceForAsset, solAmountFor, getSolUsdPrice, TIER_PRICING } from "../x402/pricing";
 import { MAX_WALLET_CAP_TOKENS } from "../config/tokenomics";
 import { getGraduationTargetSol } from "../config/graduation";
 import {
@@ -552,6 +552,23 @@ curl -s https://0xsoul.xyz/v1/mcp -H 'Content-Type: application/json' \\
         success: true,
         pricing,
         transaction: txData
+      };
+    });
+
+    // x402 公开价目表（只读，权威来源）：UI 与客户端据此展示，避免各处硬编码价锚不一致。
+    this.fastify.get("/v1/x402/prices", async () => {
+      const solUsd = getSolUsdPrice();
+      const tiers = Object.entries(TIER_PRICING).map(([tier, p]) => ({
+        tier,
+        label: p.label,
+        usdc: p.usdc,
+        sol: solAmountFor(p),
+        signalCount: p.signalCount,
+      }));
+      return {
+        solUsd,
+        anchorSource: process.env.SOL_USD_PRICE ? 'env:SOL_USD_PRICE' : 'default',
+        tiers,
       };
     });
 

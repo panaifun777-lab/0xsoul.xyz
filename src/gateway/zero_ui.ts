@@ -810,7 +810,9 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
     const langBtn = document.getElementById('lang-toggle');
     if (langBtn) langBtn.addEventListener('click', () => {
       applyLang(document.documentElement.lang === 'en' ? 'zh' : 'en');
+      // 动态渲染的面板在语言切换后需用缓存数据重绘，保证 100% 双语同步。
       if (typeof renderTickers === 'function') renderTickers();
+      if (typeof rerenderDynamic === 'function') rerenderDynamic();
     });
 
     // ===== Phase 2: ⑤ WebGL 粒子星团拓扑 + ⑦ SSE 脉冲（2D 优雅降级） =====
@@ -1104,27 +1106,45 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
     }
 
     // ===== 手机确认锁 · 状态与对账面板 =====
-    const TIER_LABEL = { EXEMPT: '免确认', SOFT: '一点确认', STRONG: '强确认' };
+    // 动态渲染文案统一走 T(zh,en)，保证与静态 data-en 一起 100% 双语同步。
+    function isEn() { return document.documentElement.lang === 'en'; }
+    function T(zh, en) { return isEn() ? en : zh; }
+    // 缓存最近一次拉取的数据，语言切换时用它重绘动态面板（100% 双语同步）。
+    let lastConfirmData: any = null;
+    let lastDeckState: any = null;
+    const TIER_LABEL = {
+      EXEMPT: { zh: '免确认', en: 'Exempt' }, SOFT: { zh: '一点确认', en: '1-Tap' }, STRONG: { zh: '强确认', en: 'Strong' }
+    };
     const TIER_COLOR = { EXEMPT: '#00ff66', SOFT: '#f0b429', STRONG: '#ff3366' };
-    const DECISION_LABEL = { approve: '已批准执行', reject: '已拒绝', timeout: '超时作废', kill: 'Kill作废' };
+    const DECISION_LABEL = {
+      approve: { zh: '已批准执行', en: 'Approved' }, reject: { zh: '已拒绝', en: 'Rejected' },
+      timeout: { zh: '超时作废', en: 'Expired' }, kill: { zh: 'Kill作废', en: 'Killed' }
+    };
     const DECISION_COLOR = { approve: '#00ff66', reject: '#ff3366', timeout: '#f0b429', kill: '#ff3366' };
-    const ACTION_LABEL = { buy: '买入', sell: '卖出', graduate: '毕业', transfer: '转账', config: '改配置', other: '其他' };
+    const ACTION_LABEL = {
+      buy: { zh: '买入', en: 'Buy' }, sell: { zh: '卖出', en: 'Sell' }, graduate: { zh: '毕业', en: 'Graduate' },
+      transfer: { zh: '转账', en: 'Transfer' }, config: { zh: '改配置', en: 'Config' }, other: { zh: '其他', en: 'Other' }
+    };
+    function pickLabel(map, key, fallback) {
+      const e = map[key];
+      return e ? (isEn() ? e.en : e.zh) : (fallback || key || '—');
+    }
 
     function confirmTierBadge(tier) {
       const c = TIER_COLOR[tier] || '#94a3b8';
-      const label = TIER_LABEL[tier] || tier || '—';
+      const label = pickLabel(TIER_LABEL, tier);
       return '<span style="display:inline-block;padding:1px 6px;border-radius:99px;font-size:0.62rem;color:' + c +
         ';background:' + c + '18;border:1px solid ' + c + '66;">' + label + '</span>';
     }
     function confirmDecisionBadge(decision) {
       const c = DECISION_COLOR[decision] || '#94a3b8';
-      const label = DECISION_LABEL[decision] || decision || '—';
+      const label = pickLabel(DECISION_LABEL, decision);
       return '<span style="display:inline-block;padding:1px 6px;border-radius:99px;font-size:0.62rem;color:' + c +
         ';background:' + c + '18;border:1px solid ' + c + '66;">' + label + '</span>';
     }
     function confirmTimeLeft(expiresAt) {
       const s = Math.max(0, Math.floor((Number(expiresAt) - Date.now()) / 1000));
-      if (s <= 0) return '已过期';
+      if (s <= 0) return T('已过期', 'Expired');
       return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
     }
 
@@ -1147,8 +1167,9 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:0.4rem;margin-bottom:0.3rem;';
         const headL = document.createElement('span');
         headL.style.cssText = 'font-size:0.74rem;color:#e2e8f0;font-weight:bold;';
+        const actionText = ACTION_LABEL[p.action] ? pickLabel(ACTION_LABEL, p.action) : (pv.isBuy ? T('买入','Buy') : T('卖出','Sell'));
         headL.innerHTML = confirmTierBadge(p.tier) + ' <span style="color:#94a3b8;font-weight:normal;">' +
-          (ACTION_LABEL[p.action] || (pv.isBuy ? '买入' : '卖出')) + ' · Agent#' + (pv.agentIndex ?? 0) + '</span>';
+          actionText + ' · Agent#' + (pv.agentIndex ?? 0) + '</span>';
         const headR = document.createElement('span');
         headR.style.cssText = 'font-size:0.68rem;color:#f0b429;white-space:nowrap;';
         headR.textContent = '⏳ ' + confirmTimeLeft(p.expiresAt);
@@ -1158,9 +1179,9 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         body.innerHTML =
           '<span style="color:var(--accent-cyan)">' + shortAddr(pv.mint) + '</span> · ' +
           fmtNum(pv.solAmount) + ' SOL → ' + fmtNum(pv.tokenAmount) + ' tok · ' +
-          '价 ' + fmtNum(pv.estimatedPriceSol) + ' · 滑点 ' + fmtNum(pv.slippagePct) + '%' +
+          T('价 ','Price ') + fmtNum(pv.estimatedPriceSol) + ' · ' + T('滑点 ','Slip ') + fmtNum(pv.slippagePct) + '%' +
           (pv.note ? '<br><span style="color:#64748b">' + String(pv.note).slice(0, 70) + '</span>' : '') +
-          '<br><span style="color:#475569">预览哈希 ' + shortAddr(p.previewHash) + ' · ' + shortAddr(p.requestId) + '</span>';
+          '<br><span style="color:#475569">' + T('预览哈希 ','Preview ') + shortAddr(p.previewHash) + ' · ' + shortAddr(p.requestId) + '</span>';
         row.appendChild(head); row.appendChild(body);
         list.appendChild(row);
       });
@@ -1183,8 +1204,9 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         const head = document.createElement('div');
         head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:0.4rem;';
         const time = a.decidedAt ? new Date(a.decidedAt).toLocaleTimeString() : '—';
+        const aAction = ACTION_LABEL[a.action] ? pickLabel(ACTION_LABEL, a.action) : (a.isBuy ? T('买入','Buy') : T('卖出','Sell'));
         head.innerHTML = confirmDecisionBadge(a.decision) +
-          ' <span style="font-size:0.66rem;color:#64748b;">' + (ACTION_LABEL[a.action] || (a.isBuy ? '买入' : '卖出')) +
+          ' <span style="font-size:0.66rem;color:#64748b;">' + aAction +
           ' · ' + fmtNum(a.solAmount) + ' SOL</span>' +
           '<span style="font-size:0.62rem;color:#475569;white-space:nowrap;">' + time + '</span>';
         const sub = document.createElement('div');
@@ -1202,19 +1224,19 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
       if (!box || !policy) return;
       const mode = document.getElementById('confirm-mode-badge');
       if (mode) {
-        const label = policy.allConfirm ? '全确认模式' : '三档分级';
-        mode.textContent = label;
-        mode.setAttribute('data-en', policy.allConfirm ? 'All-confirm' : '3-Tier');
+        mode.textContent = policy.allConfirm ? T('全确认模式','All-confirm') : T('三档分级','3-Tier');
         mode.style.color = policy.allConfirm ? '#ff3366' : '#00ff66';
         mode.style.borderColor = policy.allConfirm ? 'rgba(255,51,102,0.5)' : 'rgba(0,255,102,0.5)';
       }
       box.style.display = '';
       box.innerHTML =
-        '<span data-en="Exempt ≤">免确认 ≤</span> <b style="color:#00ff66;">' + fmtNum(policy.exemptSingleSol) + '</b> SOL · ' +
-        '<span data-en="Strong ≥">强确认 ≥</span> <b style="color:#ff3366;">' + fmtNum(policy.strongSingleSol) + '</b> SOL · ' +
-        '<span data-en="Daily cap">日累计</span> <b style="color:#f0b429;">' + fmtNum(policy.dailyCumulativeSol) + '</b> SOL · ' +
-        '<span data-en="Validity">有效期</span> ' + Math.round(Number(policy.validityMs) / 60000) + ' min<br>' +
-        '<span style="color:#475569;" data-en="Sell/graduate/transfer/config → strong confirm; approval signature stays on owner phone.">卖出/毕业/转账/改配置 → 强确认；批准签名仅在 owner 手机端。</span>';
+        T('免确认 ≤','Exempt ≤') + ' <b style="color:#00ff66;">' + fmtNum(policy.exemptSingleSol) + '</b> SOL · ' +
+        T('强确认 ≥','Strong ≥') + ' <b style="color:#ff3366;">' + fmtNum(policy.strongSingleSol) + '</b> SOL · ' +
+        T('日累计','Daily cap') + ' <b style="color:#f0b429;">' + fmtNum(policy.dailyCumulativeSol) + '</b> SOL · ' +
+        T('有效期','Validity') + ' ' + Math.round(Number(policy.validityMs) / 60000) + ' min<br>' +
+        '<span style="color:#475569;">' + T(
+          '卖出/毕业/转账/改配置 → 强确认；批准签名仅在 owner 手机端。',
+          'Sell/graduate/transfer/config → strong confirm; approval signature stays on owner phone.') + '</span>';
     }
 
     async function fetchConfirmState() {
@@ -1224,6 +1246,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         });
         if (!res.ok) return;
         const data = await res.json();
+        lastConfirmData = data;
         renderConfirmPending(data.pending);
         renderConfirmAudit(data.audit);
         renderConfirmPolicy(data.policy);
@@ -1279,7 +1302,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         : '连接钱包：生产路径使用手机端 owner 确认密钥（见手机确认锁面板），网页端不托管签名。');
     });
 
-    // 3) x402 SOL / USD 切换（USD 参考价来自已抓取的 SOL CoinGecko 价）
+    // 3) x402 SOL / USD 切换（价目表来自后端权威端点 /v1/x402/prices，杜绝硬编码价锚漂移）
     let deckUnit = 'sol';
     let SOL_USD_RATE = 0;
     function deckRenderTiers() {
@@ -1289,17 +1312,42 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         const tusd = card.querySelector('.tusd');
         if (!el) return;
         const sol = Number(el.getAttribute('data-sol'));
+        const solUsd = SOL_USD_RATE > 0 ? SOL_USD_RATE : 0;
         if (deckUnit === 'usd') {
-          const solUsd = SOL_USD_RATE > 0 ? SOL_USD_RATE : 71.09;
-          el.textContent = '$' + (sol * solUsd).toFixed(2);
+          // USD 是权威锚：直接显示后端的 usdc 值
+          const usdcAttr = el.getAttribute('data-usdc');
+          el.textContent = '$' + (usdcAttr != null ? Number(usdcAttr).toFixed(2) : (solUsd > 0 ? (sol * solUsd).toFixed(2) : '—'));
           if (unit) unit.textContent = 'USD';
-          if (tusd) tusd.textContent = '≈ ' + sol.toFixed(7) + ' SOL';
+          if (tusd) tusd.textContent = solUsd > 0 ? '≈ ' + (sol * solUsd).toFixed(7) + ' SOL' : '≈ ' + sol.toFixed(7) + ' SOL';
         } else {
-          el.textContent = String(sol);
+          el.textContent = sol.toFixed(7);
           if (unit) unit.textContent = 'SOL';
-          if (tusd) tusd.textContent = '≈ $' + (sol * (SOL_USD_RATE > 0 ? SOL_USD_RATE : 71.09)).toFixed(2);
+          const usdcAttr = el.getAttribute('data-usdc');
+          if (tusd) tusd.textContent = '≈ $' + (usdcAttr != null ? Number(usdcAttr).toFixed(2) : (solUsd > 0 ? (sol * solUsd).toFixed(2) : '—'));
         }
       });
+    }
+    // 从权威端点拉取价目表，更新 SOL 数量与 USDC 锚，并展示当前价锚来源。
+    async function deckFetchPrices() {
+      try {
+        const res = await fetch('/v1/x402/prices');
+        if (!res.ok) return;
+        const j = await res.json();
+        if (typeof j.solUsd === 'number' && j.solUsd > 0) SOL_USD_RATE = j.solUsd;
+        const cards = document.querySelectorAll('#deck-tiers .x402-tier');
+        (j.tiers || []).forEach((t, i) => {
+          const card = cards[i];
+          if (!card) return;
+          const el = card.querySelector('.sol');
+          if (el) { el.setAttribute('data-sol', String(t.sol)); el.setAttribute('data-usdc', String(t.usdc)); }
+        });
+        const note = document.getElementById('deck-price-note');
+        if (note) {
+          const label = j.anchorSource === 'env:SOL_USD_PRICE' ? T('实时价锚','live anchor') : T('默认价锚(待注入)','default anchor (inject SOL_USD_PRICE)');
+          note.textContent = 'SOL/USD ' + SOL_USD_RATE.toFixed(2) + ' · ' + label + ' · /v1/x402/prices';
+        }
+        deckRenderTiers();
+      } catch (e) {}
     }
     const uSol = document.getElementById('deck-unit-sol'), uUsd = document.getElementById('deck-unit-usd');
     if (uSol) uSol.addEventListener('click', () => { deckUnit = 'sol'; uSol.classList.add('active'); uUsd.classList.remove('active'); deckRenderTiers(); });
@@ -1373,6 +1421,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
       try {
         const res = await fetch('/v1/terminal/state');
         const data = await res.json();
+        lastDeckState = data;
         const ld = data?.token?.liquidityDepth || {};
         const raised = ld.totalRaisedSol ?? 4.8, target = ld.graduationTargetSol ?? 50, pct = ld.bondingCurveProgressPercent ?? 9.6;
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -1386,7 +1435,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         const onchain = grad.dataSource === 'onchain';
         ['deck-grad-badge','deck-grad-badge2'].forEach(id => {
           const b = document.getElementById(id);
-          if (b) { b.className = 'src-badge ' + (onchain ? 'src-live' : 'src-seed'); b.textContent = onchain ? 'ON-CHAIN' : 'SEED · 种子值'; }
+          if (b) { b.className = 'src-badge ' + (onchain ? 'src-live' : 'src-seed'); b.textContent = onchain ? 'ON-CHAIN' : T('SEED · 种子值','SEED · sample'); }
         });
         const src = document.getElementById('deck-source');
         if (src) src.textContent = 'state.dataSource = ' + (grad.dataSource || 'seed');
@@ -1395,7 +1444,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         set('deck-arc-supply', (data?.arc?.plannedTotalSupplyTokens || 1073000000).toLocaleString('en-US'));
         set('deck-arc-real', Number(arc.totalSupplyTokens || 0).toLocaleString('en-US'));
         const ab = document.getElementById('deck-arc-badge');
-        if (ab) { const live = arc.dataSource === 'onchain'; ab.className = 'src-badge ' + (live ? 'src-live' : 'src-seed'); ab.textContent = live ? '链上读取' : '种子待铸造'; }
+        if (ab) { const live = arc.dataSource === 'onchain'; ab.className = 'src-badge ' + (live ? 'src-live' : 'src-seed'); ab.textContent = live ? T('链上读取','On-chain') : T('种子待铸造','Sample · unminted'); }
         // SOL/USD 参考价（从 tickerData 里取 CoinGecko 已抓的 SOL 价）
         const solT = tickerData.find(d => d.ref === 'solana');
         if (solT && typeof solT.price === 'number' && solT.price > 0) SOL_USD_RATE = solT.price;
@@ -1403,7 +1452,45 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
       } catch (e) {}
     }
     deckFetchState();
+    deckFetchPrices();
     setInterval(deckFetchState, 5000);
+    setInterval(deckFetchPrices, 30000);
+
+    // 语言切换后重绘所有动态面板（缓存数据，不发新请求）。
+    function rerenderDynamic() {
+      if (lastConfirmData) {
+        renderConfirmPending(lastConfirmData.pending);
+        renderConfirmAudit(lastConfirmData.audit);
+        renderConfirmPolicy(lastConfirmData.policy);
+      }
+      if (lastDeckState) {
+        // 复用 deckFetchState 的渲染逻辑：临时注入一份合成响应给纯渲染部分。
+        const data = lastDeckState;
+        const ld = data?.token?.liquidityDepth || {};
+        const raised = ld.totalRaisedSol ?? 4.8, target = ld.graduationTargetSol ?? 50, pct = ld.bondingCurveProgressPercent ?? 9.6;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        set('deck-raised', Number(raised).toFixed(2)); set('deck-raised2', Number(raised).toFixed(2));
+        set('deck-target', String(target)); set('deck-target2', Number(target).toFixed(2));
+        set('deck-pct', Number(pct).toFixed(1)); set('deck-pct2', Number(pct).toFixed(1));
+        set('deck-remaining', Math.max(0, Number(target) - Number(raised)).toFixed(2));
+        deckRenderCurve(Number(pct), Number(raised), Number(target));
+        const grad = data?.graduation || {};
+        const onchain = grad.dataSource === 'onchain';
+        ['deck-grad-badge','deck-grad-badge2'].forEach(id => {
+          const b = document.getElementById(id);
+          if (b) { b.className = 'src-badge ' + (onchain ? 'src-live' : 'src-seed'); b.textContent = onchain ? 'ON-CHAIN' : T('SEED · 种子值','SEED · sample'); }
+        });
+        const src = document.getElementById('deck-source');
+        if (src) src.textContent = 'state.dataSource = ' + (grad.dataSource || 'seed');
+        const arc = data?.arc?.onchain || {};
+        set('deck-arc-supply', (data?.arc?.plannedTotalSupplyTokens || 1073000000).toLocaleString('en-US'));
+        set('deck-arc-real', Number(arc.totalSupplyTokens || 0).toLocaleString('en-US'));
+        const ab = document.getElementById('deck-arc-badge');
+        if (ab) { const live = arc.dataSource === 'onchain'; ab.className = 'src-badge ' + (live ? 'src-live' : 'src-seed'); ab.textContent = live ? T('链上读取','On-chain') : T('种子待铸造','Sample · unminted'); }
+      }
+      deckRenderTiers();
+      renderTickers();
+    }
 
     // 初始从 0 滚到默认值，即使后端慢/失败页面也"活"着
     function bootTween() {
