@@ -460,33 +460,33 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
     <!-- 搜索栏：.soul 域名查询（接 /api/domain/price） -->
     <div class="searchbar">
       <span class="s-icon" data-en="⌕ SEARCH">⌕ SEARCH</span>
-      <input id="deck-domain-input" type="text" placeholder="输入名字，查 .soul 域名 ~ 例如 gangster" data-en="Enter a name to check .soul domain ~ e.g. gangster" />
+      <input id="deck-domain-input" type="text" placeholder="输入名字，查 .soul 域名 ~ 例如 gangster" data-en="Enter a name to check .soul domain ~ e.g. gangster" data-en-placeholder="Enter a name to check .soul domain ~ e.g. gangster" />
       <span class="src-badge src-live">.soul</span>
-      <button type="button" id="deck-domain-btn" class="btn-cy" data-en="查询">查询</button>
-      <button type="button" id="deck-wallet-btn" class="btn-pu" data-en="◇ 连接钱包">◇ 连接钱包</button>
-      <button type="button" id="deck-demo-btn" class="btn-cy" data-en="▶ 演示遮罩">▶ 演示遮罩</button>
+      <button type="button" id="deck-domain-btn" class="btn-cy" data-en="Query">查询</button>
+      <button type="button" id="deck-wallet-btn" class="btn-pu" data-en="◇ Connect Wallet">◇ 连接钱包</button>
+      <button type="button" id="deck-demo-btn" class="btn-cy" data-en="▶ Demo Overlay">▶ 演示遮罩</button>
       <div id="domain-search-result" data-en=""></div>
     </div>
 
     <!-- 4 张 KPI 卡（绑定真实数据源 + 来源徽标） -->
     <div class="kpi-grid">
       <div class="kpi">
-        <div class="kpi-label"><span data-en="毕业进度 · BONDING">毕业进度 · BONDING</span><span id="deck-grad-badge" class="src-badge src-seed" data-en="SEED">SEED · 种子值</span></div>
+        <div class="kpi-label"><span data-en="Graduation · BONDING">毕业进度 · BONDING</span><span id="deck-grad-badge" class="src-badge src-seed" data-en="SEED">SEED · 种子值</span></div>
         <div class="kpi-val"><span id="deck-raised">4.80</span><span class="unit"> / <span id="deck-target">50</span> SOL</span></div>
-        <div class="kpi-sub"><span id="deck-pct">9.6</span>% · <span data-en="dataSource = seed, 非链上读数">dataSource = seed, 非链上读数</span></div>
+        <div class="kpi-sub"><span id="deck-pct">9.6</span>% · <span data-en="dataSource = seed, not live on-chain">dataSource = seed, 非链上读数</span></div>
       </div>
       <div class="kpi">
-        <div class="kpi-label"><span data-en="$GSOUL 池内储备">$GSOUL 池内储备</span><span class="src-badge src-seed" data-en="SIM">SIM · 模拟</span></div>
+        <div class="kpi-label"><span data-en="$GSOUL Reserve">$GSOUL 池内储备</span><span class="src-badge src-seed" data-en="SIM">SIM · 模拟</span></div>
         <div class="kpi-val"><span id="deck-reserve">0.4182</span><span class="unit"> SOL</span></div>
-        <div class="kpi-sub" data-en="网格收益区间 0.4178 ~ 0.4182 · 模拟漂移">网格收益区间 0.4178 ~ 0.4182 · 模拟漂移</div>
+        <div class="kpi-sub" data-en="Grid yield range 0.4178 ~ 0.4182 · simulated">网格收益区间 0.4178 ~ 0.4182 · 模拟漂移</div>
       </div>
       <div class="kpi">
-        <div class="kpi-label"><span data-en="ARC 总供应">ARC 总供应</span><span id="deck-arc-badge" class="src-badge src-seed" data-en="SEED">种子待铸造</span></div>
+        <div class="kpi-label"><span data-en="ARC Total Supply">ARC 总供应</span><span id="deck-arc-badge" class="src-badge src-seed" data-en="SEED">种子待铸造</span></div>
         <div class="kpi-val"><span id="deck-arc-supply">0</span></div>
-        <div class="kpi-sub"><span data-en="计划 1,073,000,000 · 链上已铸">计划 1,073,000,000 · 链上已铸</span> <span id="deck-arc-real">0</span></div>
+        <div class="kpi-sub"><span data-en="Planned 1,073,000,000 · minted on-chain">计划 1,073,000,000 · 链上已铸</span> <span id="deck-arc-real">0</span></div>
       </div>
       <div class="kpi">
-        <div class="kpi-label"><span data-en="在线 AGENT">在线 AGENT</span><span id="deck-agent-badge" class="src-badge src-live" data-en="ON-CHAIN">ON-CHAIN · 常态</span></div>
+        <div class="kpi-label"><span data-en="Online AGENT">在线 AGENT</span><span id="deck-agent-badge" class="src-badge src-live" data-en="ON-CHAIN">ON-CHAIN · 常态</span></div>
         <div class="kpi-val"><span id="deck-agents">6</span><span class="unit"> / 6 SWARM</span></div>
         <div class="kpi-sub" data-en="Cyclops·Degen·Pincher·Razgon·Sniffer·Surfer">Cyclops·Degen·Pincher·Razgon·Sniffer·Surfer</div>
       </div>
@@ -496,21 +496,21 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
     <div class="deck-grid">
       <!-- SWARM MESH -->
       <div class="deck-card">
-        <h3><span data-en="✦ SWARM MESH · 蜂群">✦ SWARM MESH · 蜂群</span><span class="src-badge src-live" data-en="6 NODES">6 NODES</span></h3>
+        <h3><span data-en="✦ SWARM MESH">✦ SWARM MESH · 蜂群</span><span class="src-badge src-live" data-en="6 NODES">6 NODES</span></h3>
         <canvas id="deck-mesh" class="mesh-canvas"></canvas>
         <div class="agent-grid" id="deck-agent-grid">
-          <div class="agent-chip"><span class="nm">CYCLOPS</span><span class="st" data-en="单 agent 侦察">单 agent 侦察</span><span class="dot" style="color:#00ff66;background:#00ff66"></span></div>
-          <div class="agent-chip"><span class="nm">DEGEN</span><span class="st" data-en="激进开仓">激进开仓</span><span class="dot" style="color:#9d00ff;background:#9d00ff"></span></div>
-          <div class="agent-chip"><span class="nm">PINCHER</span><span class="st" data-en="夹子防守">夹子防守</span><span class="dot" style="color:#00e5ff;background:#00e5ff"></span></div>
-          <div class="agent-chip"><span class="nm">RAZGON</span><span class="st" data-en="趋势追踪">趋势追踪</span><span class="dot" style="color:#f0b429;background:#f0b429"></span></div>
-          <div class="agent-chip"><span class="nm">SNIFFER</span><span class="st" data-en="嗅探风控">嗅探风控</span><span class="dot" style="color:#ff3366;background:#ff3366"></span></div>
-          <div class="agent-chip"><span class="nm">SURFER</span><span class="st" data-en="冲浪跟随">冲浪跟随</span><span class="dot" style="color:#00e5ff;background:#00e5ff"></span></div>
+          <div class="agent-chip"><span class="nm">CYCLOPS</span><span class="st" data-en="Single-agent scout">单 agent 侦察</span><span class="dot" style="color:#00ff66;background:#00ff66"></span></div>
+          <div class="agent-chip"><span class="nm">DEGEN</span><span class="st" data-en="Aggressive entry">激进开仓</span><span class="dot" style="color:#9d00ff;background:#9d00ff"></span></div>
+          <div class="agent-chip"><span class="nm">PINCHER</span><span class="st" data-en="Sandwich defense">夹子防守</span><span class="dot" style="color:#00e5ff;background:#00e5ff"></span></div>
+          <div class="agent-chip"><span class="nm">RAZGON</span><span class="st" data-en="Trend riding">趋势追踪</span><span class="dot" style="color:#f0b429;background:#f0b429"></span></div>
+          <div class="agent-chip"><span class="nm">SNIFFER</span><span class="st" data-en="Risk sniffing">嗅探风控</span><span class="dot" style="color:#ff3366;background:#ff3366"></span></div>
+          <div class="agent-chip"><span class="nm">SURFER</span><span class="st" data-en="Momentum follow">冲浪跟随</span><span class="dot" style="color:#00e5ff;background:#00e5ff"></span></div>
         </div>
       </div>
 
       <!-- GRADUATION 曲线仪表盘 -->
       <div class="deck-card">
-        <h3><span data-en="◈ GRADUATION · 毕业曲线">◈ GRADUATION · 毕业曲线</span><span id="deck-grad-badge2" class="src-badge src-seed" data-en="SEED">SEED · 种子口径</span></h3>
+        <h3><span data-en="◈ GRADUATION · Curve">◈ GRADUATION · 毕业曲线</span><span id="deck-grad-badge2" class="src-badge src-seed" data-en="SEED">SEED · 种子口径</span></h3>
         <div class="grad-row">
           <div class="gauge-wrap">
             <svg width="132" height="132" viewBox="0 0 132 132">
@@ -521,7 +521,7 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
             <div class="gauge-center"><span class="pct"><span id="deck-pct2">9.6</span>%</span><span class="cap" data-en="TO GRADUATION">TO GRADUATION</span></div>
           </div>
           <div class="grad-info">
-            <div><span data-en="还差 ">还差 </span><span class="big" id="deck-remaining">45.20</span><span class="big"> SOL</span><span data-en=" 毕业"> 毕业</span></div>
+            <div><span data-en="Remaining ">还差 </span><span class="big" id="deck-remaining">45.20</span><span class="big"> SOL</span><span data-en=" to graduate"> 毕业</span></div>
             <div class="kv">CURVE <span style="color:#00e5ff">bonding · exponential</span></div>
             <div class="kv">TARGET <span id="deck-target2">50.00</span> SOL · RAISED <span id="deck-raised2">4.80</span> SOL</div>
             <div class="kv">SOURCE <span id="deck-source">state.dataSource = seed</span></div>
@@ -537,19 +537,19 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
 
       <!-- x402 四档定价 -->
       <div class="deck-card">
-        <h3><span data-en="▲ x402 · 按次结算">▲ x402 · 按次结算</span>
+        <h3><span data-en="▲ x402 · Pay-per-call">▲ x402 · 按次结算</span>
           <span class="tier-switch"><button type="button" id="deck-unit-sol" class="active">SOL</button><button type="button" id="deck-unit-usd">USD</button></span>
         </h3>
         <div id="deck-tiers">
-          <div class="x402-tier"><span class="tid">P1</span><div style="flex:1"><div class="tname" data-en="PULSE 脉冲档">PULSE 脉冲档</div><div class="tdesc" data-en="单次无状态调用 · 行情快照">单次无状态调用 · 行情快照</div></div><div class="tprice"><span class="sol" data-sol="0.0014067">0.0014067</span> <span class="tunit">SOL</span><span class="tusd">≈ $0.10</span></div></div>
-          <div class="x402-tier"><span class="tid">P2</span><div style="flex:1"><div class="tname" data-en="SCOUT 侦察档">SCOUT 侦察档</div><div class="tdesc" data-en="池子扫描 · 风险标签">池子扫描 · 风险标签</div></div><div class="tprice"><span class="sol" data-sol="0.0070333">0.0070333</span> <span class="tunit">SOL</span><span class="tusd">≈ $0.50</span></div></div>
-          <div class="x402-tier featured"><span class="tid">P3</span><div style="flex:1"><div class="tname" data-en="SWARM 蜂群档">SWARM 蜂群档</div><div class="tdesc" data-en="6 agent 协同研判一次">6 agent 协同研判一次</div></div><div class="tprice"><span class="sol" data-sol="0.0281334">0.0281334</span> <span class="tunit">SOL</span><span class="tusd">≈ $2.00</span></div></div>
-          <div class="x402-tier"><span class="tid">P4</span><div style="flex:1"><div class="tname" data-en="APEX 顶点档">APEX 顶点档</div><div class="tdesc" data-en="全链路托付 · 含递归">全链路托付 · 含递归</div></div><div class="tprice"><span class="sol" data-sol="0.1406668">0.1406668</span> <span class="tunit">SOL</span><span class="tusd">≈ $10.00</span></div></div>
+          <div class="x402-tier"><span class="tid">P1</span><div style="flex:1"><div class="tname" data-en="PULSE">PULSE 脉冲档</div><div class="tdesc" data-en="Stateless single call · quote snapshot">单次无状态调用 · 行情快照</div></div><div class="tprice"><span class="sol" data-sol="0.0014067">0.0014067</span> <span class="tunit">SOL</span><span class="tusd">≈ $0.10</span></div></div>
+          <div class="x402-tier"><span class="tid">P2</span><div style="flex:1"><div class="tname" data-en="SCOUT">SCOUT 侦察档</div><div class="tdesc" data-en="Pool scan · risk tags">池子扫描 · 风险标签</div></div><div class="tprice"><span class="sol" data-sol="0.0070333">0.0070333</span> <span class="tunit">SOL</span><span class="tusd">≈ $0.50</span></div></div>
+          <div class="x402-tier featured"><span class="tid">P3</span><div style="flex:1"><div class="tname" data-en="SWARM">SWARM 蜂群档</div><div class="tdesc" data-en="6-agent collaborative analysis">6 agent 协同研判一次</div></div><div class="tprice"><span class="sol" data-sol="0.0281334">0.0281334</span> <span class="tunit">SOL</span><span class="tusd">≈ $2.00</span></div></div>
+          <div class="x402-tier"><span class="tid">P4</span><div style="flex:1"><div class="tname" data-en="APEX">APEX 顶点档</div><div class="tdesc" data-en="Full-pipeline delegation · recursive">全链路托付 · 含递归</div></div><div class="tprice"><span class="sol" data-sol="0.1406668">0.1406668</span> <span class="tunit">SOL</span><span class="tusd">≈ $10.00</span></div></div>
         </div>
-        <div class="x402-note" id="deck-price-note" data-en="价格随 SOL 市价折算，阈值以 SOL 计价；档位定价见 /v1/signals/alpha?tier=">价格随 SOL 市价折算，阈值以 SOL 计价；档位定价见 /v1/signals/alpha?tier=</div>
+        <div class="x402-note" id="deck-price-note" data-en="Prices converted at live SOL market rate; thresholds in SOL. Tiers: /v1/x402/prices">价格随 SOL 市价折算，阈值以 SOL 计价；档位定价见 /v1/x402/prices</div>
       </div>
     </div>
-    <div class="deck-divider" data-en="▼ DETAILED TELEMETRY · 详细遥测 ▼">▼ DETAILED TELEMETRY · 详细遥测 ▼</div>
+    <div class="deck-divider" data-en="▼ DETAILED TELEMETRY ▼">▼ DETAILED TELEMETRY · 详细遥测 ▼</div>
   </div>
 
   <div class="main-container">
@@ -791,12 +791,23 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
     // 每个带 data-en 的元素在加载时自动保存中文原文，切换时替换为英文
     // 仅处理叶子节点（无子元素），避免 textContent 覆盖 <code>/<strong> 等内联标签
     const i18nEls = Array.from(document.querySelectorAll('[data-en]')).filter(el => el.children.length === 0);
-    i18nEls.forEach(el => { el.dataset.zh = el.textContent.trim(); });
+    i18nEls.forEach(el => {
+      el.dataset.zh = el.textContent.trim();
+      if (el.hasAttribute('placeholder')) el.dataset.zhPlaceholder = el.getAttribute('placeholder') || '';
+    });
     function applyLang(lang) {
       i18nEls.forEach(el => {
         const zh = el.dataset.zh;
         const en = el.dataset.en;
         el.textContent = (lang === 'en' && en != null) ? en : zh;
+        // 输入框 placeholder / 按钮 title 等属性也要跟随语言（100% 双语同步）
+        if (el.hasAttribute('placeholder')) {
+          const enP = el.getAttribute('data-en-placeholder');
+          el.setAttribute('placeholder', (lang === 'en' && enP != null) ? enP : (el.dataset.zhPlaceholder || ''));
+        }
+        if (el.hasAttribute('title') && el.dataset.enTitle != null) {
+          el.setAttribute('title', (lang === 'en') ? el.dataset.enTitle : (el.dataset.zhTitle || el.getAttribute('title') || ''));
+        }
       });
       document.documentElement.lang = (lang === 'en') ? 'en' : 'zh-CN';
       document.title = (lang === 'en') ? '0x.SOUL // Swarm Command Center & M2M Terminal' : '0x.SOUL // 蜂群指挥中心与 M2M 终端';

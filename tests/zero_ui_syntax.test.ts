@@ -32,5 +32,25 @@ for (const [name, html] of [['ZERO_UI_HTML', ZERO_UI_HTML], ['DOCS_UI_HTML', DOC
   }
 }
 
+// i18n 完整性：data-en 不能是中文；带 placeholder 的元素必须有 data-en-placeholder。
+const cjk = /[\u4e00-\u9fff]/;
+const dataEnValues = [...ZERO_UI_HTML.matchAll(/data-en="([^"]*)"/g)].map((m) => m[1]);
+const badEn = dataEnValues.filter((v) => cjk.test(v));
+const placeholders = [...ZERO_UI_HTML.matchAll(/<input[^>]*placeholder="([^"]*)"[^>]*>/g)].map((m) => m[0]);
+const missingPh = placeholders.filter((tag) => !tag.includes('data-en-placeholder'));
+
+if (badEn.length) {
+  failed = true;
+  console.error(`i18n: ${badEn.length} data-en values still contain Chinese:`, badEn.slice(0, 10));
+} else {
+  console.log(`i18n: all ${dataEnValues.length} data-en values are English`);
+}
+if (missingPh.length) {
+  failed = true;
+  console.error(`i18n: ${missingPh.length} inputs missing data-en-placeholder`);
+} else {
+  console.log(`i18n: all ${placeholders.length} inputs have data-en-placeholder`);
+}
+
 if (failed) process.exit(1);
-console.log('ALL INLINE SCRIPTS VALID');
+console.log('ALL INLINE SCRIPTS VALID + I18N COMPLETE');
