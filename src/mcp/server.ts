@@ -32,6 +32,34 @@ export interface McpToolDefinition {
   };
 }
 
+/**
+ * 数据源透明标记（文书 Step 0：种子数据不得混入 L0，必须自我标识）。
+ *  - onchain    真实链上读取（gateway 注入）
+ *  - live        真实运行时状态（确认锁队列 / policy 等内存真值）
+ *  - seed        种子/演示数据（占位，不得用于真实资金决策）
+ */
+export type ToolDataSource = 'onchain' | 'live' | 'seed';
+
+export interface TelemetrySnapshot {
+  curve?: {
+    dataSource: string;
+    totalRaisedSol: number;
+    graduationTargetSol: number;
+    bondingCurveProgressPercent: number;
+    isGraduated: boolean;
+    fallbackReason?: string;
+  };
+  arc?: {
+    dataSource: string;
+    totalSupplyTokens: number;
+    totalSupplyFormatted: string;
+    contractAddress?: string;
+  };
+}
+
+/** 网关注入的真实链上状态提供者；MCP server 自身不直连 RPC，保持底层结构不变。 */
+export type TelemetryProvider = () => TelemetrySnapshot;
+
 export interface TradePreviewRequest {
   mint: string;
   isBuy: boolean;
@@ -227,6 +255,7 @@ export class GangSoulMcpServer {
   private gatewayBaseUrl: string;
   private federation: RemoteMcpFederation = new RemoteMcpFederation([]);
   private confirmation: ConfirmationService;
+  private telemetryProvider: TelemetryProvider | null = null;
   private pendingPreviews: Map<string, TradePreviewResponse> = new Map();
   private mockPortfolios: Map<number, AgentPortfolioItem[]> = new Map();
   private mockNotes: Array<{
@@ -274,6 +303,29 @@ export class GangSoulMcpServer {
   /** 暴露确认锁服务（网关 kill switch 联动用）。 */
   get confirmationService(): ConfirmationService {
     return this.confirmation;
+  }
+
+  /** 由网关注入真实链上状态（bonding curve / ARC），MCP 工具据此标注数据来源。 */
+  setTelemetryProvider(fn: TelemetryProvider): void {
+    this.telemetryProvider = fn;
+  }
+
+  /**
+   * 给工具返回值打数据来源戳（加法，不改原业务逻辑）。
+   * 文书 Step 0：种子数据必须自我标识，不得伪装成真实链上数据。
+   */
+  private stamp<T extends Record<string, any>>(result: T, source: ToolDataSource, note?: string): T & {
+    dataSource: ToolDataSource;
+    realTime: boolean;
+    notice?: string;
+  } {
+    const realTime = source !== 'seed';
+    const notice =
+      note ||
+      (source === 'seed'
+        ? '演示数据（种子/模拟），非真实链上或钱包数据，不得用于真实资金决策。'
+        : undefined);
+    return { ...result, dataSource: source, realTime, ...(notice ? { notice } : {}) } as any;
   }
 
   /**
@@ -423,41 +475,61 @@ export class GangSoulMcpServer {
       case 'gang_tokens': {
         const filter = args.filter || 'hot';
         const limit = args.limit || 10;
-        return {
-          filter,
-          total: 1,
-          tokens: [
-            {
-              mint: 'GangMemeAlpha111111111111111111111111111111111',
-              name: 'Gang Soul Alpha',
-              symbol: 'GMEME',
-              creator: 'matrix-quant-whale.soul',
-              marketCapSol: 38.0,
-              graduationProgressPct: 76.0, // 38 / 50 SOL (STANDARD 毕业目标)
-              holders: 16,
-              volume24hSol: 125.4,
-              priceSol: 0.000000038,
-              isGraduated: false,
-            },
-          ].slice(0, limit),
+        const curve = this.telemetryProvider?.()?.curve;
+        const onchain = curve && curve.dataSource === 'onchain';
+        // 网关注入真实链上毕业进度；代币清单本身仍是演示列举，逐项标注。
+        const token = {
+          mint: 'GangMemeAlpha111111111111111111111111111111111',
+          name: 'Gang Soul Alpha',
+          symbol: 'GMEME',
+          creator: 'matrix-quant-whale.soul',
+          marketCapSol: onchain ? curve!.totalRaisedSol : 38.0,
+          graduationProgressPct: onchain ? curve!.bondingCurveProgressPercent : 76.0,
+          holders: 16,
+          volume24hSol: 125.4,
+          priceSol: 0.000000038,
+          isGraduated: onchain ? curve!.isGraduated : false,
+          tokenDataSource: 'seed' as ToolDataSource, // 代币条目为演示列举
         };
+        return this.stamp(
+          { filter, total: 1, tokens: [token].slice(0, limit) },
+          'seed',
+          onchain
+            ? '代币条目为演示列举；毕业进度字段已由网关接入真实链上状态。'
+            : undefined,
+        );
       }
 
       case 'gang_info': {
-        return {
-          mint: args.mint,
-          name: 'Gang Soul Alpha',
-          symbol: 'GMEME',
-          bondingCurveSupply: 800_000_000,
-          currentPriceSol: 0.000000038,
-          solReserve: 38.0,
-          graduationTargetSol: getGraduationTargetSol(),
-          graduationProgressPct: 76.0,
-          isGraduated: false,
-          raydiumAmmId: null,
-          maxWalletHoldingCap: MAX_WALLET_CAP_TOKENS, // 总供应 1%
-          rule: 'Agent-only. Max 1.5 SOL per tx. Max 1% holding per agent passport.',
-        };
+        const curve = this.telemetryProvider?.()?.curve;
+        const onchain = curve && curve.dataSource === 'onchain';
+        return this.stamp(
+          {
+            mint: args.mint,
+            name: 'Gang Soul Alpha',
+            symbol: 'GMEME',
+            bondingCurveSupply: 800_000_000,
+            currentPriceSol: 0.000000038,
+            solReserve: onchain ? curve!.totalRaisedSol : 38.0,
+            graduationTargetSol: onchain ? curve!.graduationTargetSol : getGraduationTargetSol(),
+            graduationProgressPct: onchain ? curve!.bondingCurveProgressPercent : 76.0,
+            isGraduated: onchain ? curve!.isGraduated : false,
+            raydiumAmmId: null,
+            maxWalletHoldingCap: MAX_WALLET_CAP_TOKENS,
+            rule: 'Agent-only. Max 1.5 SOL per tx. Max 1% holding per agent passport.',
+            // 明确区分：真实字段 vs 演示字段
+            onchainFields: onchain
+              ? ['solReserve', 'graduationTargetSol', 'graduationProgressPct', 'isGraduated']
+              : [],
+            seedFields: onchain
+              ? ['name', 'symbol', 'currentPriceSol', 'bondingCurveSupply']
+              : ['*'],
+          },
+          onchain ? 'onchain' : 'seed',
+          onchain
+            ? '毕业/储备字段来自真实链上 PDA（见 onchainFields）；其余为种子演示值。'
+            : undefined,
+        );
       }
 
       case 'gang_preview': {
@@ -522,14 +594,15 @@ export class GangSoulMcpServer {
         const previewHash = this.confirmation.computePreviewHash(preview);
         const tier = this.confirmation.classify(preview, preview.isBuy ? 'buy' : 'sell');
 
-        return {
+        return this.stamp({
           status: 'PREVIEW_GENERATED',
           instruction: '请核对以下参数；如需确认将返回 challenge，调用 gang_approve 带签名批准。',
           preview,
           previewHash,
           tier,
           confirmRequired: tier !== 'EXEMPT',
-        };
+          priceDataSource: 'seed', // 报价为模拟价，非真实 Jupiter 报价
+        }, 'seed', '报价与持仓为模拟值；限额/1% 硬顶规则与三档分级为真实网关逻辑。真实报价路（Jupiter）尚未接入。');
       }
 
       case 'gang_execute': {
@@ -591,16 +664,19 @@ export class GangSoulMcpServer {
       case 'gang_confirm_status': {
         const id = args.requestId;
         if (!id) {
-          return {
+          return this.stamp({
             pending: this.confirmation.listPending(),
             audit: this.confirmation.listAudit(),
             policy: this.confirmation.getPolicySnapshot(),
-          };
+          }, 'live', '确认队列与阈值为网关真实运行时状态。');
         }
         const intent = this.confirmation.getPending(id);
-        return intent
-          ? { requestId: id, status: intent.status, tier: intent.tier, expiresAt: intent.expiresAt }
-          : { requestId: id, status: 'UNKNOWN' };
+        return this.stamp(
+          intent
+            ? { requestId: id, status: intent.status, tier: intent.tier, expiresAt: intent.expiresAt }
+            : { requestId: id, status: 'UNKNOWN' },
+          'live',
+        );
       }
 
       case 'gang_portfolio': {
@@ -609,14 +685,14 @@ export class GangSoulMcpServer {
         const totalValueSol = items.reduce((acc, cur) => acc + cur.currentValueSol, 0);
         const totalPnLSol = items.reduce((acc, cur) => acc + cur.unrealizedPnLSol, 0);
 
-        return {
+        return this.stamp({
           agentIndex,
           totalValueSol: Number(totalValueSol.toFixed(4)),
           totalPnLSol: Number(totalPnLSol.toFixed(4)),
           solUsdRate: 210.0,
           totalValueUsd: Number((totalValueSol * 210.0).toFixed(2)),
           holdings: items,
-        };
+        }, 'seed', '钱包持仓为模拟数据——真实 agent 钱包尚未部署（见 Agent 钱包服务设计稿 Step 1）。');
       }
 
       case 'gang_notes': {
@@ -625,10 +701,10 @@ export class GangSoulMcpServer {
         if (args.mint) {
           notes = notes.filter((n) => n.mint === args.mint);
         }
-        return {
+        return this.stamp({
           total: notes.length,
           notes: notes.slice(0, limit),
-        };
+        }, 'seed', '链上思考流（notes）为演示数据，非真实链上事件。');
       }
 
       case 'gang_follow': {
@@ -661,8 +737,8 @@ export class GangSoulMcpServer {
         if (args.initialBuySol && args.initialBuySol > 1.5) {
           throw new Error(`创世买入金额 ${args.initialBuySol} SOL 超过 1.5 SOL 沙盒限额`);
         }
-        return {
-          status: 'LAUNCH_SUBMITTED',
+        return this.stamp({
+          status: 'LAUNCH_SUBMITTED_SIMULATED',
           mint: `GangMeme${Date.now()}NewCreatedToken11111111111`,
           name: args.name,
           symbol: args.symbol,
@@ -672,7 +748,7 @@ export class GangSoulMcpServer {
           note: (args.note || '').slice(0, 140),
           jitoAttached: true,
           txSignature: `5LaunchSig${Date.now()}GenesisAlphaHash8888888888`,
-        };
+        }, 'seed', '发射为模拟：未上链、未创建真实 mint。L3 发射门须等参数表六处待定定稿后才开（见设计稿 Step 3）。');
       }
 
       default:

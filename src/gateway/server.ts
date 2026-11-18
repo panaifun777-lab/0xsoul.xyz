@@ -68,6 +68,24 @@ export class GangSoulGateway {
           "wool vintage lock whisper razor diesel divide plastic unaware shield shock brass abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
       );
     this.engine = this.buildEngine();
+    // 把网关真实链上状态注入 MCP server（数据源透明，文书 Step 0）。
+    // 只读回调，不改 MCP 底层逻辑；curve/arc reader 已在网关内定时刷新。
+    this.mcpServer.setTelemetryProvider(() => ({
+      curve: {
+        dataSource: this.curveState.source,
+        totalRaisedSol: this.curveState.totalRaisedSol,
+        graduationTargetSol: this.curveState.graduationTargetSol,
+        bondingCurveProgressPercent: this.curveState.bondingCurveProgressPercent,
+        isGraduated: this.curveState.isGraduated,
+        fallbackReason: this.curveState.fallbackReason,
+      },
+      arc: {
+        dataSource: this.arcState.source,
+        totalSupplyTokens: this.arcState.totalSupplyTokens,
+        totalSupplyFormatted: this.arcState.totalSupplyFormatted,
+        contractAddress: this.arcState.contractAddress,
+      },
+    }));
   }
 
   /* ------------------------------------------------------------------ */
