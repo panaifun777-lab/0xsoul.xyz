@@ -1110,8 +1110,8 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
     function isEn() { return document.documentElement.lang === 'en'; }
     function T(zh, en) { return isEn() ? en : zh; }
     // 缓存最近一次拉取的数据，语言切换时用它重绘动态面板（100% 双语同步）。
-    let lastConfirmData: any = null;
-    let lastDeckState: any = null;
+    let lastConfirmData = null;
+    let lastDeckState = null;
     const TIER_LABEL = {
       EXEMPT: { zh: '免确认', en: 'Exempt' }, SOFT: { zh: '一点确认', en: '1-Tap' }, STRONG: { zh: '强确认', en: 'Strong' }
     };
