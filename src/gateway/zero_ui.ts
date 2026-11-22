@@ -486,9 +486,9 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         <div class="kpi-sub"><span data-en="Planned 1,073,000,000 · minted on-chain">计划 1,073,000,000 · 链上已铸</span> <span id="deck-arc-real">0</span></div>
       </div>
       <div class="kpi">
-        <div class="kpi-label"><span data-en="Online AGENT">在线 AGENT</span><span id="deck-agent-badge" class="src-badge src-live" data-en="ON-CHAIN">ON-CHAIN · 常态</span></div>
-        <div class="kpi-val"><span id="deck-agents">6</span><span class="unit"> / 6 SWARM</span></div>
-        <div class="kpi-sub" data-en="Cyclops·Degen·Pincher·Razgon·Sniffer·Surfer">Cyclops·Degen·Pincher·Razgon·Sniffer·Surfer</div>
+        <div class="kpi-label"><span data-en="Agent Wallet (Turnkey)">Agent 钱包 · Turnkey</span><span id="deck-wallet-badge" class="src-badge src-live" data-en="READ-ONLY">只读 · HSM</span></div>
+        <div class="kpi-val" style="font-size:0.92rem;word-break:break-all;padding-top:0.35rem;"><code id="deck-wallet-addr" style="color:var(--accent-green);" data-en="">（未配置 AGENT_WALLET_ADDRESS）</code></div>
+        <div class="kpi-sub"><span data-en="Balance: ">余额: </span><span id="deck-wallet-bal">—</span> SOL · <span data-en="no signing path">无签名路径</span></div>
       </div>
     </div>
 
@@ -1123,6 +1123,19 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
     // 缓存最近一次拉取的数据，语言切换时用它重绘动态面板（100% 双语同步）。
     let lastConfirmData = null;
     let lastDeckState = null;
+    let lastWalletAddr = '';
+    async function fetchWalletBalance(addr) {
+      try {
+        const payload = { jsonrpc: '2.0', id: 1, method: 'getBalance', params: [addr] };
+        const res = await fetch('https://api.devnet.solana.com', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        const lamports = j?.result?.value ?? 0;
+        const el = document.getElementById('deck-wallet-bal');
+        if (el) el.textContent = (lamports / 1e9).toFixed(4);
+      } catch (e) {}
+    }
     const TIER_LABEL = {
       EXEMPT: { zh: '免确认', en: 'Exempt' }, SOFT: { zh: '一点确认', en: '1-Tap' }, STRONG: { zh: '强确认', en: 'Strong' }
     };
@@ -1456,6 +1469,23 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         set('deck-arc-real', Number(arc.totalSupplyTokens || 0).toLocaleString('en-US'));
         const ab = document.getElementById('deck-arc-badge');
         if (ab) { const live = arc.dataSource === 'onchain'; ab.className = 'src-badge ' + (live ? 'src-live' : 'src-seed'); ab.textContent = live ? T('链上读取','On-chain') : T('种子待铸造','Sample · unminted'); }
+        // 只读 agent 交易钱包（Turnkey HSM）
+        const aw = data?.agentWallet || {};
+        const waddr = document.getElementById('deck-wallet-addr');
+        if (waddr) {
+          if (aw.address) { waddr.textContent = aw.address.slice(0, 6) + '…' + aw.address.slice(-6); waddr.setAttribute('title', aw.address); }
+          else { waddr.textContent = T('（未配置 AGENT_WALLET_ADDRESS）','(AGENT_WALLET_ADDRESS not set)'); }
+        }
+        const wbadge = document.getElementById('deck-wallet-badge');
+        if (wbadge) {
+          const ok = aw.dataSource === 'turnkey';
+          wbadge.className = 'src-badge ' + (ok ? 'src-live' : 'src-seed');
+          wbadge.textContent = ok ? T('只读 · HSM','READ-ONLY · HSM') : T('未配置','unconfigured');
+        }
+        if (aw.address && !lastWalletAddr) {
+          lastWalletAddr = aw.address;
+          fetchWalletBalance(aw.address);
+        }
         // SOL/USD 参考价（从 tickerData 里取 CoinGecko 已抓的 SOL 价）
         const solT = tickerData.find(d => d.ref === 'solana');
         if (solT && typeof solT.price === 'number' && solT.price > 0) SOL_USD_RATE = solT.price;
@@ -1498,6 +1528,13 @@ export const ZERO_UI_HTML = `<!DOCTYPE html>
         set('deck-arc-real', Number(arc.totalSupplyTokens || 0).toLocaleString('en-US'));
         const ab = document.getElementById('deck-arc-badge');
         if (ab) { const live = arc.dataSource === 'onchain'; ab.className = 'src-badge ' + (live ? 'src-live' : 'src-seed'); ab.textContent = live ? T('链上读取','On-chain') : T('种子待铸造','Sample · unminted'); }
+        const aw = data?.agentWallet || {};
+        const wbadge = document.getElementById('deck-wallet-badge');
+        if (wbadge) {
+          const ok = aw.dataSource === 'turnkey';
+          wbadge.className = 'src-badge ' + (ok ? 'src-live' : 'src-seed');
+          wbadge.textContent = ok ? T('只读 · HSM','READ-ONLY · HSM') : T('未配置','unconfigured');
+        }
       }
       deckRenderTiers();
       renderTickers();

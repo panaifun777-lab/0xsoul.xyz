@@ -415,6 +415,14 @@ curl -s https://0xsoul.xyz/v1/mcp -H 'Content-Type: application/json' \\
           isGraduated: cs.isGraduated,
           fallbackReason: cs.fallbackReason,
         },
+        // 只读 agent 交易钱包（Turnkey HSM，私钥不导出）；地址来自 env，网关只展示、不签名。
+        agentWallet: {
+          dataSource: process.env.AGENT_WALLET_ADDRESS ? 'turnkey' : 'unconfigured',
+          address: process.env.AGENT_WALLET_ADDRESS || null,
+          walletId: process.env.AGENT_WALLET_ID || null,
+          network: process.env.SOLANA_NETWORK || 'devnet',
+          signCapability: 'none', // Step 1 前半段：agent 无签名路径；签名能力由独立策略后续授予
+        },
         arc: {
           onchain: {
             dataSource: this.arcState.source,
