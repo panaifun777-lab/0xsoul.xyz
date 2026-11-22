@@ -421,7 +421,7 @@ curl -s https://0xsoul.xyz/v1/mcp -H 'Content-Type: application/json' \\
           address: process.env.AGENT_WALLET_ADDRESS || null,
           walletId: process.env.AGENT_WALLET_ID || null,
           network: process.env.SOLANA_NETWORK || 'devnet',
-          signCapability: 'none', // Step 1 前半段：agent 无签名路径；签名能力由独立策略后续授予
+          signCapability: 'gated', // Step 1：agent 可提交，须 owner 批准 + Turnkey 策略门控（solana.tx allowlist/限额）
         },
         arc: {
           onchain: {
