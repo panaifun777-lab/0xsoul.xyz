@@ -122,13 +122,19 @@ function setupTempProfile(cfg: TurnkeySignConfig): { home: string; keyFile: stri
   return { home, keyFile };
 }
 
-async function tk(cfg: TurnkeySignConfig, home: string, args: string[]): Promise<any> {
-  const { stdout } = await execFileAsync(cfg.tkBin, args, {
+/** 不要求 JSON 输出的 tk 调用（用于 profile create 等纯文本命令）。 */
+async function tkRaw(cfg: TurnkeySignConfig, home: string, args: string[]): Promise<string> {
+  const { stdout, stderr } = await execFileAsync(cfg.tkBin, args, {
     env: { ...process.env, HOME: home },
     maxBuffer: 4 * 1024 * 1024,
   });
-  const lines = stdout.split('\n').filter((l) => l.trim().startsWith('{'));
-  if (!lines.length) throw new Error('tk 无 JSON 输出');
+  return (stdout || '') + (stderr || '');
+}
+
+async function tk(cfg: TurnkeySignConfig, home: string, args: string[]): Promise<any> {
+  const text = await tkRaw(cfg, home, args);
+  const lines = text.split('\n').filter((l) => l.trim().startsWith('{'));
+  if (!lines.length) throw new Error('tk 无 JSON 输出: ' + text.slice(0, 200));
   return JSON.parse(lines[lines.length - 1]);
 }
 
@@ -139,7 +145,7 @@ async function tk(cfg: TurnkeySignConfig, home: string, args: string[]): Promise
 export async function executeTransfer(cfg: TurnkeySignConfig, req: SignRequest): Promise<SignOutcome> {
   const { home, keyFile } = setupTempProfile(cfg);
   try {
-    await tk(cfg, home, [
+    await tkRaw(cfg, home, [
       'profile', 'create', '--profile-name', 'agent',
       '--organization-id', cfg.organizationId,
       '--api-key-file', keyFile, '--non-interactive',
@@ -177,7 +183,7 @@ export async function executeTransfer(cfg: TurnkeySignConfig, req: SignRequest):
 export async function finalizeTransfer(cfg: TurnkeySignConfig, activityId: string): Promise<SignOutcome> {
   const { home, keyFile } = setupTempProfile(cfg);
   try {
-    await tk(cfg, home, [
+    await tkRaw(cfg, home, [
       'profile', 'create', '--profile-name', 'agent',
       '--organization-id', cfg.organizationId,
       '--api-key-file', keyFile, '--non-interactive',
