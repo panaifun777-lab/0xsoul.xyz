@@ -21,6 +21,10 @@ import { resolveTier, priceForAsset, solAmountFor, getSolUsdPrice, TIER_PRICING 
 import { MAX_WALLET_CAP_TOKENS } from "../config/tokenomics";
 import { getGraduationTargetSol } from "../config/graduation";
 import {
+  loadTurnkeySignConfig,
+  executeTransfer as turnkeyExecuteTransfer,
+} from "../chain/turnkey_signer";
+import {
   readBondingCurveOnChain,
   initialSeedState,
   type BondingCurveState,
@@ -86,6 +90,28 @@ export class GangSoulGateway {
         contractAddress: this.arcState.contractAddress,
       },
     }));
+
+    // 真实签名器（可选）：配置齐全才注入，未配置则 MCP executor 保持 mock（向后兼容）。
+    // 网关只持 agent 凭据提交签名；owner 批准由手机/外部完成，网关轮询等待。
+    const signCfg = loadTurnkeySignConfig();
+    if (signCfg) {
+      this.mcpServer.setLiveSigner(async (req) => {
+        const out = await turnkeyExecuteTransfer(signCfg, {
+          to: req.to,
+          amountSol: req.amountSol,
+          note: req.note,
+        });
+        return {
+          ok: out.ok,
+          status: out.status,
+          txid: out.txid,
+          reason: out.reason,
+        };
+      });
+      console.log('[turnkey] live signer ENABLED (agent key, owner approval required, wallet ' + signCfg.walletAddress.slice(0, 8) + '…)');
+    } else {
+      console.log('[turnkey] live signer disabled (TURNKEY_LIVE_SIGN=1 + agent API key needed); executor stays mock');
+    }
   }
 
   /* ------------------------------------------------------------------ */

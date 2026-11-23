@@ -41,6 +41,9 @@ COPY --from=builder /app/public ./public
 COPY scripts/entrypoint.sh ./scripts/entrypoint.sh
 COPY bin/ ./bin/
 
+# tk CLI：真实签名执行器用的已验证 musl 二进制（VPS 端到端签名成功）
+RUN chmod +x ./bin/tk
+
 # 授权执行权限
 RUN chmod +x ./scripts/entrypoint.sh && chown -R node:node /app
 

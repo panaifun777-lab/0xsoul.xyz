@@ -21,6 +21,12 @@ import {
   type Executor,
   type ConfirmAction,
 } from './confirmation';
+// 真实签名器契约：给定转账请求返回广播结果；由网关注入，未注入时 executor 保持 mock。
+export type LiveSigner = (req: {
+  to: string;
+  amountSol: number;
+  note?: string;
+}) => Promise<{ ok: boolean; status: string; txid?: string; reason?: string }>;
 
 export interface McpToolDefinition {
   name: string;
@@ -87,6 +93,8 @@ export interface TradePreviewResponse {
     reason?: string;
     capUsagePct: number;
   };
+  /** 可选：真实 SOL 转账的目标地址。仅当本字段存在且注入了 liveSigner 时走 HSM 真实签名。 */
+  liveTransferTo?: string;
 }
 
 export interface TradeExecutionResult {
@@ -207,6 +215,21 @@ export const GANG_SOUL_PRODUCTION_MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'gang_transfer_sol',
+    description:
+      '【真实签名】向指定地址转一笔 SOL（devnet）。走确认锁三档分级：提交后返回 challenge，' +
+      'owner 手机签名批准 → 经 Turnkey HSM 签名并广播。仅在配置 TURNKEY_LIVE_SIGN=1 时可用。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: '接收方 Solana 地址' },
+        amountSol: { type: 'number', description: '转账金额 SOL（≤ 单笔上限）' },
+        note: { type: 'string', description: '链上思考理由 / 用途说明' },
+      },
+      required: ['to', 'amountSol'],
+    },
+  },
+  {
     name: 'gang_launch',
     description: '在 0x.SOUL 联合曲线上发射全新的 Agent Meme 代币，写入元数据并绑定初始流动性',
     inputSchema: {
@@ -256,6 +279,7 @@ export class GangSoulMcpServer {
   private federation: RemoteMcpFederation = new RemoteMcpFederation([]);
   private confirmation: ConfirmationService;
   private telemetryProvider: TelemetryProvider | null = null;
+  private liveSigner: LiveSigner | null = null;
   private pendingPreviews: Map<string, TradePreviewResponse> = new Map();
   private mockPortfolios: Map<number, AgentPortfolioItem[]> = new Map();
   private mockNotes: Array<{
@@ -310,6 +334,11 @@ export class GangSoulMcpServer {
     this.telemetryProvider = fn;
   }
 
+  /** 由网关注入真实签名器（Turnkey HSM）；未注入则 executor 保持 mock 执行。 */
+  setLiveSigner(fn: LiveSigner): void {
+    this.liveSigner = fn;
+  }
+
   /**
    * 给工具返回值打数据来源戳（加法，不改原业务逻辑）。
    * 文书 Step 0：种子数据必须自我标识，不得伪装成真实链上数据。
@@ -333,8 +362,56 @@ export class GangSoulMcpServer {
    * 真实 live_executor 后续以同一 Executor 接口接入，确认锁逻辑无需改动。
    */
   private getExecutor(): Executor {
-    return (preview: TradePreviewResponse) => {
+    return async (preview: TradePreviewResponse) => {
       const startTime = Date.now();
+
+      // 真实签名路径：仅当注入了 liveSigner 且 preview 带 liveTransferTo（真实 SOL 转账目标）。
+      // 代币买卖（mint/isBuy）当前策略未覆盖 Jupiter/SPL，不伪造成交——明确标 seed 走 mock 或拒绝。
+      if (this.liveSigner && preview.liveTransferTo) {
+        const out = await this.liveSigner({
+          to: preview.liveTransferTo,
+          amountSol: preview.solAmount,
+          note: preview.note,
+        });
+        if (!out.ok) {
+          return {
+            status: 'FAILED',
+            result: {
+              txSignature: '', status: 'FAILED', mint: preview.mint, isBuy: preview.isBuy,
+              solAmount: preview.solAmount, tokenAmount: preview.tokenAmount, note: preview.note,
+              reason: out.reason, dataSource: 'live', signStatus: out.status,
+              ...(out.activityId ? { activityId: out.activityId } : {}),
+            },
+          };
+        }
+        // SUBMITTED：HSM 签名申请已提交，待 owner 在手机批准后才广播成交。
+        // 此处绝不伪造 txid / CONFIRMED——如实返回 SUBMITTED + activityId。
+        const result: TradeExecutionResult = {
+          txSignature: out.txid || '',
+          status: out.txid ? 'CONFIRMED' : 'FAILED',
+          mint: preview.mint,
+          isBuy: preview.isBuy,
+          solAmount: preview.solAmount,
+          tokenAmount: preview.tokenAmount,
+          latencyMs: Date.now() - startTime,
+          note: preview.note,
+          timestamp: Date.now(),
+        };
+        return {
+          status: out.status, // 'SUBMITTED'
+          result: {
+            ...result,
+            status: out.txid ? 'CONFIRMED' : 'PENDING',
+            dataSource: 'live',
+            execution: 'turnkey-hsm',
+            activityId: out.activityId,
+            reason: out.reason,
+          },
+          txid: out.txid,
+        };
+      }
+
+      // mock 执行（保留）：更新模拟持仓并生成模拟 txid，标注 seed。
       let holdings = this.mockPortfolios.get(preview.agentIndex) || [];
       let existing = holdings.find((h) => h.mint === preview.mint);
       if (!existing) {
@@ -378,7 +455,11 @@ export class GangSoulMcpServer {
         note: preview.note,
         timestamp: Date.now(),
       };
-      return { status: 'CONFIRMED', result, txid: result.txSignature };
+      return {
+        status: 'CONFIRMED',
+        result: { ...result, dataSource: 'seed', execution: 'mock' },
+        txid: result.txSignature,
+      };
     };
   }
 
@@ -731,6 +812,56 @@ export class GangSoulMcpServer {
           note: `[Follow ${note.agentName}] Co-trade inspired by tx ${note.tx.substring(0, 8)}`,
           agentIndex,
         });
+      }
+
+      case 'gang_transfer_sol': {
+        // 真实 SOL 转账：构造带 liveTransferTo 的 preview，走与买币相同的确认锁状态机。
+        // 提交时不签名；owner 用手机确认锁批准（gang_approve）后，executor 调 Turnkey 提交 HSM 签名申请。
+        const to = String(args.to || '');
+        const amountSol = Number(args.amountSol || 0);
+        if (!to || !(amountSol > 0)) {
+          return this.stamp({ error: 'INVALID_ARG', message: 'to 与 amountSol 必填且金额>0' }, 'live');
+        }
+        if (!this.liveSigner) {
+          return this.stamp({
+            status: 'LIVE_SIGN_DISABLED',
+            message: '真实签名未开启：需 TURNKEY_LIVE_SIGN=1 且配置 agent API key。未启用时不会伪造成交。',
+          }, 'live');
+        }
+        const requestId = `xfer_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        const preview: TradePreviewResponse = {
+          requestId,
+          mint: 'SOL',
+          isBuy: false,
+          solAmount: amountSol,
+          tokenAmount: 0,
+          estimatedPriceSol: 1,
+          slippagePct: 0,
+          jitoTipSol: 0,
+          note: (args.note || '').slice(0, 140),
+          agentIndex: 0,
+          expiresAt: Date.now() + 180_000,
+          riskEvaluation: { allowed: true, capUsagePct: 0 },
+          liveTransferTo: to,
+        };
+        this.pendingPreviews.set(requestId, preview);
+        const submit = await this.confirmation.submit(preview, 'transfer', this.getExecutor());
+        if (submit.status === 'REJECTED') {
+          this.pendingPreviews.delete(requestId);
+          return this.stamp({ status: 'REJECTED', reason: submit.reason }, 'live');
+        }
+        return this.stamp({
+          status: 'PENDING_CONFIRMATION',
+          requestId,
+          tier: submit.intent?.tier,
+          previewHash: submit.intent?.previewHash,
+          challenge: submit.challenge,
+          expiresAt: submit.intent?.expiresAt,
+          instruction:
+            '真实 SOL 转账：用手机确认私钥对 challenge 签名并调用 gang_approve(requestId, signature)。批准后由 Turnkey HSM 签名；owner 还需在 Turnkey 侧投票后才会广播。',
+          to,
+          amountSol,
+        }, 'live');
       }
 
       case 'gang_launch': {
