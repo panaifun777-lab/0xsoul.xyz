@@ -40,22 +40,63 @@
 - 任意卖出仍由另一条策略/网关规则管；本 ALLOW 只覆盖买币。
 - consensus 沿用已验证写法 `approvers.filter(user, user.id in [agent, owner]).count() >= 2`；不要退回两个 `count()` 做 `&&`（提交即拒）。
 
-## 4. 需要真实交易验证的点（devnet，未做）
+## 4. 真实交易验证结果（已实测，2026-11-24）
 
-1. 构造一笔真实 Jupiter V0 swap，用 `get_policy_evaluations` 看 Turnkey 实际解析出的 `program_keys` / `transfers` / `spl_transfers` / `token_mint` 各是什么。
-2. `program_keys` 是否稳定落在 6 个 allowlist 内；ALT 地址是否出现在 `transfers.to` / `spl_transfers.to` 或触发 `ADDRESS_TABLE_LOOKUP` 哨兵。
-3. wSOL 输入与输出代币是否进入 `spl_transfers`、mint 值是否等于 `{{MINT}}`。
-4. 输入 SOL 是否被 `transfers.amount` 捕获；若否，金额上限对 swap 无效。
-5. 两票 consensus 在「提交」时刻是否仍通过（agent 一票 + owner 一票）。
-6. 反例测试：非 allowlist mint、超金额、非 allowlist program、人为放大滑点——确认都会被拒或被网关拦下。
+配套脚本：`scripts/devnet_spl_swap_probe.ts`（devnet 简单 transfer）与
+`scripts/jupiter_swap_probe.mjs`（mainnet 真实 Jupiter swap 构造，只签名评估不广播）。
+
+### 4.1 简单 SPL transfer：策略引擎完整解析
+
+最初失败的根因不是策略语言，而是**探针构造错误**：交易的 fee payer 与 source ATA owner
+是 devnet 测试 keypair，但 `signWith` 指向 Turnkey 钱包，两者不一致，Turnkey 无法解析。
+修正为「Turnkey 钱包同时是 fee payer + source ATA owner」后：
+
+| 条件 | 结果 |
+|---|---|
+| `wallet.id` + `spl_transfers.count()==1` + `token_mint==MINT` | 匹配 → `ACTIVITY_STATUS_CONSENSUS_NEEDED` |
+| 上式 + `t.amount == 500000` | 匹配（amount 是代币原子单位，非人类可读） |
+| 上式 + `program_keys.all(p, p in [Token, System])` | 匹配 |
+| 上式 + `t.destination == poolAta` | 匹配 |
+| **删除该策略后提交同一交易** | **403 unauthorized**（证明匹配确实来自 SPL 条件，不是残留策略） |
+
+结论：对顶层 `TransferChecked`，`token_mint` / `amount` / `destination` / `program_keys`
+全部可解析，mint allowlist 在这类交易上可靠。
+
+### 4.2 真实 Jupiter swap：CPI 内代币流完全不可见
+
+用 mainnet lite-api 取真实 quote（0.001 SOL → USDC，路由随请求变化，实测出现过
+Meteora DLMM / BisonFi+Manifest / ZeroFi），以 Turnkey 钱包为 `userPublicKey` 构造
+VersionedTransaction，**不签名、不广播**，提交给 Turnkey 策略引擎评估：
+
+| 条件 | 结果 |
+|---|---|
+| `wallet.id` 单独 | 匹配 → 待批准（基线正常） |
+| `wallet.id && spl_transfers.count() >= 1` | **不匹配 → 403** |
+| `wallet.id && spl_transfers.count() == 0` | 匹配 → 待批准 |
+
+顶层程序实测为：`ComputeBudget`、`Jupiter aggregator`、`System`、`SPL Token`、
+以及随路由变化的 DEX program；指令约 8 条。
+
+结论（已证实第 2 节的最坏假设）：**Jupiter 聚合器内部通过 CPI 完成的代币转移不会进入
+`spl_transfers`，`token_mint` 对真实 swap 完全不可见**。因此：
+- 第 3 节骨架里 `spl_transfers.all(...)` 对真实 swap 恒为空真（`all()` 空列表返回 true）；
+  `count() > 0` 兜底会让真实 swap 被拒——这是 fail-closed，安全但买币不可用。
+- 用 `token_mint` 做「只买 allowlist 币」的强保证，只对顶层 TransferChecked 有效，
+  **对 Jupiter swap 无效**。
 
 ## 5. 诚实结论
 
-**不能完整表达「只允许买 allowlist 内的币且滑点受控」。**
+**Turnkey 策略无法完整表达「只允许买 allowlist 内的币且滑点受控」。**
 
-- 程序 allowlist：可以表达（顶层 program_keys），但需真实 swap 验证 DEX CPI 是否引入额外顶层程序。
-- mint allowlist：仅对 TransferChecked 类顶层 SPL 转移可靠；对 Jupiter swap 的 CPI 代币流基本看不见，骨架里的写法是尽力而为，不能作为「只买 allowlist 币」的强保证。
-- 金额上限：只约束 System Program 直接转账（lamports）；swap 走 wSOL/SPL 时可绕过，且 SPL amount 不是 SOL。
-- 滑点：**完全没有表达通道**。Turnkey `solana.tx` 语言没有 slippage / minOut / quote / price 字段，无法在策略里判定「滑点受控」。用 `instruction_data_hex` 锁定报价属于把策略绑定到单笔交易，不是通用方案。
+- 简单 SPL transfer（顶层 TransferChecked）：mint / amount / destination / program allowlist 全部可靠。
+- 真实 Jupiter swap：CPI 代币流不可见，`spl_transfers` 恒为 0，mint allowlist 失效；
+  顶层 program 随路由变化，固定 allowlist 需要持续维护，只能做粗粒度 backstop。
+- 金额上限：只约束 System Program 直接转账（lamports）；swap 走 wSOL/SPL 时不可见。
+- 滑点：**完全没有表达通道**。Turnkey `solana.tx` 没有 slippage / minOut / quote / price 字段。
+  用 `instruction_data_hex` 锁定报价等于绑定单笔交易，不是通用方案。
 
-因此分工必须是：Turnkey 策略只做**粗粒度backstop**（钱包 + 顶层程序 allowlist + 粗金额上限 + 2-of-N 多签）；「买 allowlist 内的币、真实价格、滑点上限、1%/1.5 SOL 硬顶、报价 TTL」全部由**网关层**（Jupiter quote → minOut 计算与校验、价格源、持仓检查、确认锁）承担。网关当前这些检查用的是种子价，接真实 Jupiter 报价是本方案落地的前置条件。
+因此分工必须是：Turnkey 策略只做**粗粒度 backstop**（钱包 + 顶层程序 allowlist +
+粗金额上限 + 2-of-N 多签）；「买 allowlist 内的币、真实价格、滑点上限、1%/1.5 SOL 硬顶、
+报价 TTL」全部由**网关层**（Jupiter quote → minOut 计算与校验、价格源、持仓检查、确认锁）
+承担。网关当前持有 Jupiter quote 适配层（`src/price/jupiter_quote.ts`）但默认 seed 回退；
+真实买币上线前，必须让网关在构造 swap 时用 quote 校验 minOut 与目标 mint，并保留确认锁。
