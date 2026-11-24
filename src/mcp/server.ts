@@ -21,6 +21,8 @@ import {
   type Executor,
   type ConfirmAction,
 } from './confirmation';
+import { getJupiterQuote, isJupiterQuoteEnabled } from '../price/jupiter_quote';
+
 // 真实签名器契约：给定转账请求返回广播结果；由网关注入，未注入时 executor 保持 mock。
 export type LiveSigner = (req: {
   to: string;
@@ -631,7 +633,26 @@ export class GangSoulMcpServer {
           };
         }
 
-        const priceSol = 0.000000038;
+        // 报价：优先真实 Jupiter（仅 mainnet 且显式开启），失败/未开启回退种子价。
+        // 不改确认锁/哈希/风控：estimatedPriceSol 仍是单一价格来源，下面公式不变。
+        const SEED_PRICE = 0.000000038;
+        let priceSol = SEED_PRICE;
+        let priceDataSource: 'jupiter' | 'seed' = 'seed';
+        let quoteMeta: Record<string, unknown> = {};
+        if (isJupiterQuoteEnabled()) {
+          const q = await getJupiterQuote(
+            args.mint,
+            'So11111111111111111111111111111111111111112', // So1111…12 = wrapped SOL
+            1_000_000, // 1 枚 6 位小数代币
+            Math.round(slippagePct * 100), // 1% -> 100 bps
+            { inputDecimals: 6, outputDecimals: 9 },
+          );
+          if (q) {
+            priceSol = q.priceSol;
+            priceDataSource = 'jupiter';
+            quoteMeta = { priceImpactPct: q.priceImpactPct, routeSummary: q.routeSummary, quoteOutAmount: q.outAmount };
+          }
+        }
         const estimatedTokens = isBuy ? Math.floor(solAmount / priceSol) : tokenAmount;
         const estimatedSol = isBuy ? solAmount : Number((tokenAmount * priceSol).toFixed(4));
 
@@ -682,8 +703,11 @@ export class GangSoulMcpServer {
           previewHash,
           tier,
           confirmRequired: tier !== 'EXEMPT',
-          priceDataSource: 'seed', // 报价为模拟价，非真实 Jupiter 报价
-        }, 'seed', '报价与持仓为模拟值；限额/1% 硬顶规则与三档分级为真实网关逻辑。真实报价路（Jupiter）尚未接入。');
+          priceDataSource,
+          ...quoteMeta,
+        }, priceDataSource, priceDataSource === 'seed'
+          ? '报价为种子价（devnet/未开启 Jupiter）；持仓为模拟值；限额/1% 硬顶/三档分级为真实网关逻辑。'
+          : '报价来自 Jupiter 实时路由，价格影响与路由见 priceImpactPct/routeSummary。');
       }
 
       case 'gang_execute': {
