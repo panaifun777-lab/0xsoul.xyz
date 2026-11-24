@@ -28,7 +28,8 @@ export type LiveSigner = (req: {
   to: string;
   amountSol: number;
   note?: string;
-}) => Promise<{ ok: boolean; status: string; txid?: string; reason?: string }>;
+  requestId?: string;
+}) => Promise<{ ok: boolean; status: string; txid?: string; reason?: string; activityId?: string }>;
 
 export interface McpToolDefinition {
   name: string;
@@ -374,6 +375,7 @@ export class GangSoulMcpServer {
           to: preview.liveTransferTo,
           amountSol: preview.solAmount,
           note: preview.note,
+          requestId: preview.requestId,
         });
         if (!out.ok) {
           return {

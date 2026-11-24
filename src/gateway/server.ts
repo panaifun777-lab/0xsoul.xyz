@@ -23,6 +23,7 @@ import { getGraduationTargetSol } from "../config/graduation";
 import {
   loadTurnkeySignConfig,
   executeTransfer as turnkeyExecuteTransfer,
+  finalizeTransfer as turnkeyFinalizeTransfer,
 } from "../chain/turnkey_signer";
 import {
   readBondingCurveOnChain,
@@ -63,6 +64,8 @@ export class GangSoulGateway {
   private arcActivity?: ArcActivityWatcher;
   private mcpServer = new GangSoulMcpServer();
   private killSwitchEngaged = false;
+  /** Turnkey 签名活动状态：activityId → { status, txid?, updatedAt }。owner 批准后由后台自动广播更新。 */
+  private signingActivities = new Map<string, { status: string; txid?: string; updatedAt: number; requestId?: string; note?: string }>();
 
   constructor(clusterManager?: SolanaAgentClusterManager) {
     this.cluster =
@@ -101,14 +104,35 @@ export class GangSoulGateway {
           amountSol: req.amountSol,
           note: req.note,
         });
+        if (out.ok && out.activityId) {
+          // 后台等待 owner 批准并自动广播：网关不代批，只轮询已批准签名 + 广播。
+          this.signingActivities.set(out.activityId, {
+            status: 'AWAITING_OWNER', requestId: req.requestId, note: req.note, updatedAt: Date.now(),
+          });
+          void turnkeyFinalizeTransfer(signCfg, out.activityId)
+            .then((fin) => {
+              this.signingActivities.set(out.activityId!, {
+                status: fin.ok ? 'BROADCASTED' : fin.status,
+                ...(fin.txid ? { txid: fin.txid } : {}),
+                requestId: req.requestId, note: fin.reason, updatedAt: Date.now(),
+              });
+              console.log('[turnkey] activity ' + out.activityId + ' -> ' + (fin.ok ? 'BROADCASTED tx=' + fin.txid : fin.status));
+            })
+            .catch((e) => {
+              this.signingActivities.set(out.activityId!, {
+                status: 'FAILED', note: e?.message || String(e), requestId: req.requestId, updatedAt: Date.now(),
+              });
+            });
+        }
         return {
           ok: out.ok,
           status: out.status,
           txid: out.txid,
           reason: out.reason,
+          activityId: out.activityId,
         };
       });
-      console.log('[turnkey] live signer ENABLED (agent key, owner approval required, wallet ' + signCfg.walletAddress.slice(0, 8) + '…)');
+      console.log('[turnkey] live signer ENABLED (agent key, owner approval required, auto-broadcast on approval, wallet ' + signCfg.walletAddress.slice(0, 8) + '…)');
     } else {
       console.log('[turnkey] live signer disabled (TURNKEY_LIVE_SIGN=1 + agent API key needed); executor stays mock');
     }
@@ -545,7 +569,9 @@ curl -s https://0xsoul.xyz/v1/mcp -H 'Content-Type: application/json' \\
     this.fastify.post("/v1/confirm/status", async (req: FastifyRequest, reply: FastifyReply) => {
       const body = req.body as { requestId?: string };
       const result = await this.mcpServer.executeTool("gang_confirm_status", { requestId: body?.requestId });
-      return reply.send(result);
+      // 附上 Turnkey 签名活动状态（owner 批准后自动广播的进度/最终 txid）
+      const signing = [...this.signingActivities.entries()].map(([activityId, s]) => ({ activityId, ...s }));
+      return reply.send({ ...(result as any), signingActivities: signing });
     });
 
     // Kill switch：一键清空待确认队列、作废所有未批准意图（PDF 第 6 节第 5 点）
