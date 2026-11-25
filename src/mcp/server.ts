@@ -22,11 +22,22 @@ import {
   type ConfirmAction,
 } from './confirmation';
 import { getJupiterQuote, isJupiterQuoteEnabled } from '../price/jupiter_quote';
+import { buildJupiterSwap, isJupiterSwapEnabled } from '../price/jupiter_swap';
 
 // 真实签名器契约：给定转账请求返回广播结果；由网关注入，未注入时 executor 保持 mock。
 export type LiveSigner = (req: {
   to: string;
   amountSol: number;
+  note?: string;
+  requestId?: string;
+}) => Promise<{ ok: boolean; status: string; txid?: string; reason?: string; activityId?: string }>;
+
+/** 真实 swap 签名器契约：网关把构造并校验过的 unsigned swap hex 交给 Turnkey。 */
+export type LiveSwapSigner = (req: {
+  unsignedHex: string;
+  mint: string;
+  minOut: string;
+  solAmount: number;
   note?: string;
   requestId?: string;
 }) => Promise<{ ok: boolean; status: string; txid?: string; reason?: string; activityId?: string }>;
@@ -98,6 +109,16 @@ export interface TradePreviewResponse {
   };
   /** 可选：真实 SOL 转账的目标地址。仅当本字段存在且注入了 liveSigner 时走 HSM 真实签名。 */
   liveTransferTo?: string;
+  /** 可选：构造并校验过的真实 Jupiter swap。仅在注入 liveSwapSigner 时走 HSM 签名。 */
+  liveSwap?: {
+    unsignedHex: string;
+    mint: string;
+    minOut: string;
+    outAmount: string;
+    inputAmount: string;
+    programs: string[];
+    quote: Record<string, unknown>;
+  };
 }
 
 export interface TradeExecutionResult {
@@ -283,6 +304,7 @@ export class GangSoulMcpServer {
   private confirmation: ConfirmationService;
   private telemetryProvider: TelemetryProvider | null = null;
   private liveSigner: LiveSigner | null = null;
+  private liveSwapSigner: LiveSwapSigner | null = null;
   private pendingPreviews: Map<string, TradePreviewResponse> = new Map();
   private mockPortfolios: Map<number, AgentPortfolioItem[]> = new Map();
   private mockNotes: Array<{
@@ -342,6 +364,11 @@ export class GangSoulMcpServer {
     this.liveSigner = fn;
   }
 
+  /** 由网关注入真实 swap 签名器；未注入或 preview 无 liveSwap 则买币保持 mock。 */
+  setLiveSwapSigner(fn: LiveSwapSigner): void {
+    this.liveSwapSigner = fn;
+  }
+
   /**
    * 给工具返回值打数据来源戳（加法，不改原业务逻辑）。
    * 文书 Step 0：种子数据必须自我标识，不得伪装成真实链上数据。
@@ -367,6 +394,49 @@ export class GangSoulMcpServer {
   private getExecutor(): Executor {
     return async (preview: TradePreviewResponse) => {
       const startTime = Date.now();
+
+      // 真实 Jupiter 买币：preview 带已构造并校验过的 unsigned swap hex + minOut，
+      // 且注入了 liveSwapSigner 时走 Turnkey 提交；owner 批准后才广播，绝不伪造成交。
+      if (this.liveSwapSigner && preview.liveSwap && preview.isBuy) {
+        const out = await this.liveSwapSigner({
+          unsignedHex: preview.liveSwap.unsignedHex,
+          mint: preview.liveSwap.mint,
+          minOut: preview.liveSwap.minOut,
+          solAmount: preview.solAmount,
+          note: preview.note,
+          requestId: preview.requestId,
+        });
+        const base = {
+          mint: preview.mint, isBuy: preview.isBuy, solAmount: preview.solAmount,
+          tokenAmount: preview.tokenAmount, note: preview.note,
+        };
+        if (!out.ok) {
+          return {
+            status: 'FAILED',
+            result: {
+              ...base, txSignature: '', status: 'FAILED', reason: out.reason,
+              dataSource: 'live', execution: 'turnkey-hsm',
+              ...(out.activityId ? { activityId: out.activityId } : {}),
+            },
+          };
+        }
+        return {
+          status: out.status,
+          result: {
+            ...base,
+            txSignature: out.txid || '',
+            status: out.txid ? 'CONFIRMED' : 'PENDING',
+            latencyMs: Date.now() - startTime,
+            timestamp: Date.now(),
+            dataSource: 'live', execution: 'turnkey-jupiter-swap',
+            minOut: preview.liveSwap.minOut,
+            programs: preview.liveSwap.programs,
+            activityId: out.activityId,
+            reason: out.reason,
+          },
+          txid: out.txid,
+        };
+      }
 
       // 真实签名路径：仅当注入了 liveSigner 且 preview 带 liveTransferTo（真实 SOL 转账目标）。
       // 代币买卖（mint/isBuy）当前策略未覆盖 Jupiter/SPL，不伪造成交——明确标 seed 走 mock 或拒绝。
@@ -655,8 +725,35 @@ export class GangSoulMcpServer {
             quoteMeta = { priceImpactPct: q.priceImpactPct, routeSummary: q.routeSummary, quoteOutAmount: q.outAmount };
           }
         }
-        const estimatedTokens = isBuy ? Math.floor(solAmount / priceSol) : tokenAmount;
+        let estimatedTokens = isBuy ? Math.floor(solAmount / priceSol) : tokenAmount;
         const estimatedSol = isBuy ? solAmount : Number((tokenAmount * priceSol).toFixed(4));
+
+        // 真实买币：构造并校验 Jupiter swap（只在 mainnet 显式开启时生效）。
+        // 构造失败一律不绑定 liveSwap，上层保持 seed mock，绝不拿未校验交易去签名。
+        let liveSwap: TradePreviewResponse['liveSwap'];
+        let swapMeta: Record<string, unknown> = {};
+        if (isBuy && this.liveSwapSigner && isJupiterSwapEnabled() && solAmount > 0) {
+          const built = await buildJupiterSwap({
+            isBuy, solAmount, mint: args.mint, slippagePct,
+          });
+          if (built) {
+            liveSwap = {
+              unsignedHex: built.unsignedHex,
+              mint: args.mint,
+              minOut: built.minOut,
+              outAmount: built.quote.outAmount,
+              inputAmount: built.inputAmount,
+              programs: built.programs,
+              quote: built.quote as unknown as Record<string, unknown>,
+            };
+            estimatedTokens = Number(built.quote.outAmount) / 1e6;
+            swapMeta = {
+              swapDataSource: 'jupiter',
+              minOut: built.minOut,
+              swapPrograms: built.programs,
+            };
+          }
+        }
 
         // 1% 持仓硬顶风控评估
         const currentHoldings = (this.mockPortfolios.get(agentIndex) || []).find((p) => p.mint === args.mint);
@@ -690,6 +787,7 @@ export class GangSoulMcpServer {
             allowed: true,
             capUsagePct: Number(postCapPct.toFixed(2)),
           },
+          ...(liveSwap ? { liveSwap } : {}),
         };
 
         this.pendingPreviews.set(requestId, preview);
@@ -706,10 +804,14 @@ export class GangSoulMcpServer {
           tier,
           confirmRequired: tier !== 'EXEMPT',
           priceDataSource,
+          executionMode: liveSwap ? 'turnkey-jupiter-swap' : 'mock',
           ...quoteMeta,
-        }, priceDataSource, priceDataSource === 'seed'
-          ? '报价为种子价（devnet/未开启 Jupiter）；持仓为模拟值；限额/1% 硬顶/三档分级为真实网关逻辑。'
-          : '报价来自 Jupiter 实时路由，价格影响与路由见 priceImpactPct/routeSummary。');
+          ...swapMeta,
+        }, liveSwap ? 'live' : (priceDataSource === 'jupiter' ? 'onchain' : 'seed'), liveSwap
+          ? '真实买币：Jupiter quote + minOut + 顶层程序白名单已在网关校验；批准后将由 Turnkey HSM 签名，owner 投票后广播。'
+          : priceDataSource === 'seed'
+          ? '报价为种子价（devnet/未开启真实 swap）；持仓为模拟值；限额/1% 硬顶/三档分级为真实网关逻辑。'
+          : '报价来自 Jupiter 实时路由，但未构造真实 swap（当前为演示执行）。');
       }
 
       case 'gang_execute': {

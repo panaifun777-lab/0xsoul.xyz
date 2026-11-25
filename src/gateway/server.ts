@@ -24,6 +24,8 @@ import {
   loadTurnkeySignConfig,
   executeTransfer as turnkeyExecuteTransfer,
   finalizeTransfer as turnkeyFinalizeTransfer,
+  executeUnsignedTransaction as turnkeyExecuteUnsigned,
+  finalizeUnsignedTransaction as turnkeyFinalizeUnsigned,
 } from "../chain/turnkey_signer";
 import {
   readBondingCurveOnChain,
@@ -132,7 +134,39 @@ export class GangSoulGateway {
           activityId: out.activityId,
         };
       });
+      // 真实 swap 签名器：MCP 只把已构造并校验过的 unsigned hex 交进来，
+      // 网关绝不代批；owner 在 Turnkey 侧批准后后台自动广播。
+      this.mcpServer.setLiveSwapSigner(async (req) => {
+        const out = await turnkeyExecuteUnsigned(signCfg, {
+          unsignedHex: req.unsignedHex,
+          note: req.note,
+          requestId: req.requestId,
+        });
+        if (out.ok && out.activityId) {
+          this.signingActivities.set(out.activityId, {
+            status: 'AWAITING_OWNER', requestId: req.requestId,
+            note: `[jupiter-swap] mint=${req.mint} minOut=${req.minOut} ${req.note || ''}`,
+            updatedAt: Date.now(),
+          });
+          void turnkeyFinalizeUnsigned(signCfg, out.activityId)
+            .then((fin) => {
+              this.signingActivities.set(out.activityId!, {
+                status: fin.ok ? 'BROADCASTED' : fin.status,
+                ...(fin.txid ? { txid: fin.txid } : {}),
+                requestId: req.requestId, note: fin.reason, updatedAt: Date.now(),
+              });
+              console.log('[turnkey] swap activity ' + out.activityId + ' -> ' + (fin.ok ? 'BROADCASTED tx=' + fin.txid : fin.status));
+            })
+            .catch((e) => {
+              this.signingActivities.set(out.activityId!, {
+                status: 'FAILED', note: e?.message || String(e), requestId: req.requestId, updatedAt: Date.now(),
+              });
+            });
+        }
+        return { ok: out.ok, status: out.status, txid: out.txid, reason: out.reason, activityId: out.activityId };
+      });
       console.log('[turnkey] live signer ENABLED (agent key, owner approval required, auto-broadcast on approval, wallet ' + signCfg.walletAddress.slice(0, 8) + '…)');
+      console.log('[turnkey] live swap signer ENABLED (Jupiter swap gated by JUPITER_SWAP_ENABLED + mainnet)');
     } else {
       console.log('[turnkey] live signer disabled (TURNKEY_LIVE_SIGN=1 + agent API key needed); executor stays mock');
     }

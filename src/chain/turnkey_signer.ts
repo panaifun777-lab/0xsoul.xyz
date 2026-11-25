@@ -63,6 +63,13 @@ export interface SignOutcome {
   reason?: string;
 }
 
+export interface UnsignedSignRequest {
+  unsignedHex: string;
+  note?: string;
+  requestId?: string;
+  signWith?: string;
+}
+
 const num = (key: string, fallback: number) => {
   const v = Number(process.env[key]);
   return Number.isFinite(v) && v > 0 ? v : fallback;
@@ -138,6 +145,23 @@ async function tk(cfg: TurnkeySignConfig, home: string, args: string[]): Promise
   return JSON.parse(lines[lines.length - 1]);
 }
 
+function errorFragment(e: any): string {
+  const raw = e?.stderr || e?.body || e?.message
+    || (e != null ? (typeof e === 'object' ? JSON.stringify(e) : String(e)) : 'unknown error');
+  const text = (typeof raw === 'string' ? raw : JSON.stringify(raw)).trim();
+  if (!text) return 'unknown error';
+  try {
+    const obj = JSON.parse(text);
+    const parts: string[] = [];
+    if (obj?.status) parts.push('HTTP ' + obj.status);
+    const msg = obj?.message || obj?.detail || obj?.title
+      || (typeof obj?.error === 'string' ? obj.error : '');
+    if (msg) parts.push(String(msg));
+    if (parts.length) return (parts.join(': ') + ' | ' + text).slice(0, 1500);
+  } catch {}
+  return text.slice(0, 1500);
+}
+
 /**
  * 第一步：构造交易 → tk 提交签名申请（agent 凭据）→ 返回 pending activity。
  * 网关不持有 owner 凭据，只提交，不代批。
@@ -179,7 +203,37 @@ export async function executeTransfer(cfg: TurnkeySignConfig, req: SignRequest):
   }
 }
 
-/** 第二步（owner 批准后，由 owner 侧/运维调用）：查询 activity → 取 HSM 签名 → 广播。 */
+async function waitAndBroadcast(
+  cfg: TurnkeySignConfig,
+  home: string,
+  activityId: string,
+): Promise<SignOutcome> {
+  const deadline = Date.now() + cfg.approvalTimeoutMs;
+  let signedHex = '';
+  while (Date.now() < deadline) {
+    const res = await tk(cfg, home, [
+      '--profile', 'agent', '--message-format', 'json',
+      'activity', 'get', '--id', activityId,
+    ]);
+    const activity = res?.data?.activity || res?.activity;
+    const status = activity?.status || '';
+    if (activity?.result?.signTransactionResult?.signedTransaction) {
+      signedHex = activity.result.signTransactionResult.signedTransaction;
+      break;
+    }
+    if (status.includes('REJECTED') || status.includes('FAILED')) {
+      return { ok: false, status: 'FAILED', activityId, reason: status };
+    }
+    await sleep(cfg.pollIntervalMs);
+  }
+  if (!signedHex) {
+    return { ok: false, status: 'PENDING_OWNER', activityId, reason: 'owner 未在超时内批准' };
+  }
+  const connection = new Connection(cfg.rpcUrl, 'confirmed');
+  const txid = await connection.sendRawTransaction(Buffer.from(signedHex, 'hex'), { skipPreflight: false });
+  return { ok: true, status: 'SUBMITTED', txid, activityId };
+}
+
 export async function finalizeTransfer(cfg: TurnkeySignConfig, activityId: string): Promise<SignOutcome> {
   const { home, keyFile } = setupTempProfile(cfg);
   try {
@@ -188,32 +242,69 @@ export async function finalizeTransfer(cfg: TurnkeySignConfig, activityId: strin
       '--organization-id', cfg.organizationId,
       '--api-key-file', keyFile, '--non-interactive',
     ]);
-    const deadline = Date.now() + cfg.approvalTimeoutMs;
-    let signedHex = '';
-    while (Date.now() < deadline) {
-      const res = await tk(cfg, home, [
-        '--profile', 'agent', '--message-format', 'json',
-        'activity', 'get', '--id', activityId,
-      ]);
-      const activity = res?.data?.activity || res?.activity;
-      const status = activity?.status || '';
-      if (activity?.result?.signTransactionResult?.signedTransaction) {
-        signedHex = activity.result.signTransactionResult.signedTransaction;
-        break;
-      }
-      if (status.includes('REJECTED') || status.includes('FAILED')) {
-        return { ok: false, status: 'FAILED', activityId, reason: status };
-      }
-      await sleep(cfg.pollIntervalMs);
-    }
-    if (!signedHex) {
-      return { ok: false, status: 'PENDING_OWNER', activityId, reason: 'owner 未在超时内批准' };
-    }
-    const connection = new Connection(cfg.rpcUrl, 'confirmed');
-    const txid = await connection.sendRawTransaction(Buffer.from(signedHex, 'hex'), { skipPreflight: false });
-    return { ok: true, status: 'SUBMITTED', txid, activityId };
+    return await waitAndBroadcast(cfg, home, activityId);
   } catch (e: any) {
     return { ok: false, status: 'FAILED', activityId, reason: e?.stderr || e?.message || String(e) };
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+export async function executeUnsignedTransaction(
+  cfg: TurnkeySignConfig,
+  req: UnsignedSignRequest,
+): Promise<{ ok: boolean; status: string; activityId?: string; reason?: string; txid?: string }> {
+  const { home, keyFile } = setupTempProfile(cfg);
+  try {
+    await tkRaw(cfg, home, [
+      'profile', 'create', '--profile-name', 'agent',
+      '--organization-id', cfg.organizationId,
+      '--api-key-file', keyFile, '--non-interactive',
+    ]);
+    const inputFile = join(home, 'sign.json');
+    writeFileSync(inputFile, JSON.stringify({
+      type: 'TRANSACTION_TYPE_SOLANA',
+      signWith: req.signWith || cfg.walletAddress,
+      unsignedTransaction: req.unsignedHex,
+    }));
+    const res = await tk(cfg, home, [
+      '--profile', 'agent', '--message-format', 'json',
+      'sign', 'transaction', '--input-file', inputFile,
+    ]);
+    const activity = res?.data?.activity || res?.activity;
+    const activityId = activity?.id || '';
+    if (!activityId) {
+      return { ok: false, status: 'FAILED', reason: errorFragment(res) };
+    }
+    const trace = [req.note, req.requestId].filter(Boolean).join(' / ');
+    return {
+      ok: true,
+      status: 'SUBMITTED',
+      activityId,
+      reason: '已提交 Turnkey，待 owner 在手机/Turnkey App 批准（activity ' + activityId + '）' + (trace ? ' · ' + trace : ''),
+    };
+  } catch (e: any) {
+    return { ok: false, status: 'FAILED', reason: errorFragment(e) };
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+export async function finalizeUnsignedTransaction(
+  cfg: TurnkeySignConfig,
+  activityId: string,
+): Promise<{ ok: boolean; status: string; txid?: string; reason?: string }> {
+  const { home, keyFile } = setupTempProfile(cfg);
+  try {
+    await tkRaw(cfg, home, [
+      'profile', 'create', '--profile-name', 'agent',
+      '--organization-id', cfg.organizationId,
+      '--api-key-file', keyFile, '--non-interactive',
+    ]);
+    const r = await waitAndBroadcast(cfg, home, activityId);
+    return { ok: r.ok, status: r.status, txid: r.txid, reason: r.reason };
+  } catch (e: any) {
+    return { ok: false, status: 'FAILED', reason: errorFragment(e) };
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
