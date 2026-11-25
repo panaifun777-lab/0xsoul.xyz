@@ -1,7 +1,15 @@
 # Jupiter 真实买币切主网执行清单（已实测，待 owner 授权）
 
-> 状态：**未执行**。本文只记录已验证的前提、精确参数与阻塞点。
+> 状态：**第 2 步已执行（ALLOW 策略已加），其余阻塞待 owner 处理**。
 > 实测日期：2026-11-24。所有命令在 VPS `/opt/0xsoul` 与 tk CLI `0xsoul-user`/`0xsoul-agent` profile 下验证。
+
+## 执行进度（2026-11-24）
+
+- [x] 新 ALLOW 策略已创建：`jupiter-swap-backstop-v1`，policyId `c42500a9-bfed-49d3-95de-03e31c62cb62`。
+      条件与 consensus 见第 1 节；已验证能匹配真实 mainnet swap（pending）。
+      加策略后线上 `gang_preview` 仍 `executionMode:mock / liveSwap:false`，现有 devnet 行为不变。
+- [ ] 阻塞 1：owner 向 `AGENT_WALLET_ADDRESS` 转 0.02–0.05 SOL mainnet（当前余额 0）。
+- [ ] 阻塞 2/3：改 compose + .env、重建容器、owner 手机确认准备。
 
 ## 0. 硬性阻塞（执行前必须解决）
 
@@ -40,8 +48,8 @@
 ## 2. 执行顺序（owner 确认后逐条执行，每步验证）
 
 1. owner 转 0.02–0.05 SOL 到 `AGENT_WALLET_ADDRESS`，用 `getBalance` 确认 > 0。
-2. 用 tk CLI 创建上面的 ALLOW 策略（`tk --profile 0xsoul-user policy create-batch`），
-   记下 policyId，`policy list` 核对。
+2. ~~用 tk CLI 创建上面的 ALLOW 策略~~ **已完成**：`jupiter-swap-backstop-v1`
+   （policyId `c42500a9-bfed-49d3-95de-03e31c62cb62`），`policy list` 已核对。无需重复创建。
 3. 改 `docker-compose.yml` 第 31 行 `SOLANA_NETWORK=devnet` → `mainnet`，
    并加 `JUPITER_SWAP_ENABLED=1`（可选 `JUPITER_QUOTE_ENABLED=1` 让价格也走真实报价）。
    同时删除 `.env` 第 12 行重复的 `SOLANA_NETWORK=devnet`（保留第 71 行 mainnet）。
